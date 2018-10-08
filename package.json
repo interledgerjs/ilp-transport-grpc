@@ -1,0 +1,97 @@
+{
+  "name": "ilp-protocol-btp3",
+  "version": "0.0.0",
+  "description": "BTPv3 implementation",
+  "main": "dist/lib/index.js",
+  "types": "dist/lib/index.d.ts",
+  "files": [
+    "src/lib/**/*.ts",
+    "dist/lib/**/*.js",
+    "dist/lib/**/*.js.map",
+    "dist/lib/**/*.d.ts",
+    "dist/doc"
+  ],
+  "scripts": {
+    "clean": "rm -Rf .nyc_output && rm -Rf coverage && rm -Rf doc && rm -Rf lib ",
+    "build": "tsc",
+    "lint": "tslint --project .",
+    "pretest": "tsc --build && cp ./src/test/mocks/widgets/legacy-widget.js ./lib/test/mocks/widgets/legacy-widget.js",
+    "test": "nyc mocha --ui mocha-typescript --require source-map-support/register --recursive dist/test",
+    "doc": "typedoc --options typedoc.js src/lib/index.ts",
+    "codecov": "codecov",
+    "preversion": "npm run lint && npm test",
+    "version": "git add -A src",
+    "postversion": "git push && git push --tags",
+    "prepublishOnly": "npm run lint && npm test && npm run doc"
+  },
+  "engines": {
+    "node": ">=8"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adrianhopebailie/ilp-protocol-btp3.git"
+  },
+  "keywords": [
+    "interledger",
+    "ilp",
+    "payment request",
+    "crypto",
+    "condition",
+    "payments"
+  ],
+  "author": "Interledger Team <info@interledger.org>",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/adrianhopebailie/ilp-protocol-btp3/issues"
+  },
+  "homepage": "https://github.com/adrianhopebailie/ilp-protocol-btp3#readme",
+  "dependencies": {
+    "@types/ws": "^6.0.1",
+    "ilp-module-loader": "^0.3.3",
+    "oer-utils": "^3.0.1",
+    "ws": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/chai": "^4.1.4",
+    "@types/chai-as-promised": "^7.1.0",
+    "@types/debug": "0.0.30",
+    "@types/mocha": "^5.2.5",
+    "@types/node": "^10.9.4",
+    "@types/node-fetch": "^2.1.2",
+    "@types/sinon": "^5.0.1",
+    "chai": "^4.1.2",
+    "chai-as-promised": "^7.1.1",
+    "codecov": "^3.0.2",
+    "mocha": "^5.2.0",
+    "mocha-typescript": "^1.1.14",
+    "nyc": "^12.0.2",
+    "sinon": "^6.0.1",
+    "source-map-support": "^0.5.9",
+    "tslint": "^5.11.0",
+    "tslint-config-standard": "^8.0.1",
+    "typedoc": "^0.12.0",
+    "typescript": "^3.0.3"
+  },
+  "nyc": {
+    "check-coverage": true,
+    "lines": 80,
+    "statements": 80,
+    "functions": 80,
+    "branches": 80,
+    "include": [
+      "dist/lib/**/*.js"
+    ],
+    "exclude": [
+      "dist/test/**/*.js"
+    ],
+    "reporter": [
+      "lcov",
+      "text-summary"
+    ],
+    "all": true
+  },
+  "optionalDependencies": {
+    "bufferutil": "^4.0.0",
+    "utf-8-validate": "^5.0.1"
+  }
+}
