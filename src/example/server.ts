@@ -1,7 +1,4 @@
-import { BtpServer } from '../lib/server'
-import { BtpMessage, BtpMessageContentType } from '../lib/packet'
-import { BtpError } from '../lib/error'
-import { BtpSocket } from '../lib/socket'
+import { BtpError, BtpSocket, BtpServer, BtpMessage, BtpMessageContentType } from '../lib'
 import { createLogger } from 'ilp-module-loader'
 
 const server = new BtpServer({},{

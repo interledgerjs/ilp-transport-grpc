@@ -1,9 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const server_1 = require("../lib/server");
-const packet_1 = require("../lib/packet");
+const lib_1 = require("../lib");
 const ilp_module_loader_1 = require("ilp-module-loader");
-const server = new server_1.BtpServer({}, {
+const server = new lib_1.BtpServer({}, {
     log: ilp_module_loader_1.createLogger('btp-server'),
     authenticate: () => Promise.resolve({ account: 'alice' })
 });
@@ -21,7 +20,7 @@ server.on('connection', (socket) => {
             setTimeout(() => {
                 respond({
                     protocol: 'ilp',
-                    contentType: packet_1.BtpMessageContentType.ApplicationOctetStream,
+                    contentType: lib_1.BtpMessageContentType.ApplicationOctetStream,
                     payload: Buffer.from('Goodbye!')
                 });
             }, 1000);

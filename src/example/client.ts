@@ -1,5 +1,4 @@
-import { createConnection } from '../lib/socket'
-import { BtpMessageContentType } from '../lib/packet'
+import { createConnection, BtpMessageContentType } from '../lib'
 
 (async () => {
   const client = await createConnection('ws+unix:///tmp/btp-server.sock', {
