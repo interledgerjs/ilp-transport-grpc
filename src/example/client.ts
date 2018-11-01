@@ -1,7 +1,7 @@
 import { createConnection, BtpMessageContentType } from '../lib'
 
 (async () => {
-  const client = await createConnection('ws+unix:///tmp/btp-server.sock', {
+  const client = await createConnection('127.0.0.1:5005', {
     headers: {
       authorization: 'Bearer TOKEN'
     }

@@ -4,9 +4,28 @@ import * as https from 'https'
 import * as net from 'net'
 import * as fs from 'fs'
 import { EventEmitter } from 'events'
-import { BtpSocket, BtpAuthResponse } from './socket'
+import { BtpStream, BtpAuthResponse } from './stream'
 import { SIGINT } from 'constants'
 import { ModuleConstructorOptions, ModuleServices, AccountInfo, createLogger, IlpLogger } from 'ilp-module-loader'
+
+import {
+    loadPackageDefinition,
+    Server,
+    ServerCredentials
+} from 'grpc'
+
+const PROTO_PATH = __dirname + '/btp.proto'
+const protoLoader = require('@grpc/proto-loader')
+const packageDefinition = protoLoader.loadSync(
+    PROTO_PATH,
+  {keepCase: true,
+    longs: String,
+    enums: String,
+    defaults: true,
+    oneofs: true
+  })
+const protoDescriptor = loadPackageDefinition(packageDefinition)
+export const interledger = protoDescriptor.interledger
 
 export interface BtpServerOptions extends ModuleConstructorOptions, https.ServerOptions {
   secure?: boolean
@@ -23,13 +42,11 @@ interface ExtendedWebSocket extends WebSocket {
 }
 export class BtpServer extends EventEmitter {
   protected _log: IlpLogger
-  protected _server: http.Server | https.Server
-  protected _wss: WebSocket.Server
+  protected _grpc: Server
   protected _authenticate: (req: http.IncomingMessage) => Promise<BtpAuthResponse>
   constructor (options: BtpServerOptions, services: BtpServerServices) {
     super()
     this._log = services.log
-    this._server = options.secure ? https.createServer(options) : http.createServer()
     this._authenticate = services.authenticate || skipAuthentication
   }
   public async listen (options: BtpServerListenOptions): Promise<void> {
@@ -39,7 +56,6 @@ export class BtpServer extends EventEmitter {
     }
     const log = this._log
     const unixSocket = options.path && !options.port
-    const server = this._server
     const authenticate = this._authenticate
 
     const handleProtocols = (protocols: string[], req: http.IncomingMessage): string | false => {
@@ -59,73 +75,60 @@ export class BtpServer extends EventEmitter {
       })
     }
 
-    this._wss = new WebSocket.Server({
-      server,
-      handleProtocols,
-      verifyClient
-    })
+    this._grpc = new Server()
 
     // Handle UNIX sockets that weren't cleaned up properly
-    this._wss.on('error', (e: any) => {
-      if (e.code === 'EADDRINUSE' && unixSocket) {
-        this._log.warn(`${options.path} in use, attempting to clean up.`)
-        const tempClientSocket = new net.Socket()
-        tempClientSocket.on('error', (ce: any) => {
-          if (ce.code === 'ECONNREFUSED') {  // No other server listening
-            this._log.warn(`No server listening at ${options.path}. Removing file and trying again.`)
-            fs.unlinkSync(`${options.path}`)
-            server.close()
-            server.listen(`${options.path}`)
-          }
-        })
-        tempClientSocket.connect({ path: options.path! }, () => {
-          this._log.error(`Another server is listening on ${options.path}.`)
-          this.emit('error', e)
-        })
-      } else {
-        log.error(e)
-        this.emit('error', e)
-      }
-    })
+    // this._wss.on('error', (e: any) => {
+    //   if (e.code === 'EADDRINUSE' && unixSocket) {
+    //     this._log.warn(`${options.path} in use, attempting to clean up.`)
+    //     const tempClientSocket = new net.Socket()
+    //     tempClientSocket.on('error', (ce: any) => {
+    //       if (ce.code === 'ECONNREFUSED') {  // No other server listening
+    //         this._log.warn(`No server listening at ${options.path}. Removing file and trying again.`)
+    //         fs.unlinkSync(`${options.path}`)
+    //         server.close()
+    //         server.listen(`${options.path}`)
+    //       }
+    //     })
+    //     tempClientSocket.connect({ path: options.path! }, () => {
+    //       this._log.error(`Another server is listening on ${options.path}.`)
+    //       this.emit('error', e)
+    //     })
+    //   } else {
+    //     log.error(e)
+    //     this.emit('error', e)
+    //   }
+    // })
 
     // Override handleUpgrade to authenticate
-    const wsHandleUpgrade = this._wss.handleUpgrade.bind(this._wss)
-    this._wss.handleUpgrade = (req: http.IncomingMessage, socket: any, upgradeHead: Buffer, callback: (client: WebSocket) => void) => {
-      authenticate(req).then(({ account, info }) => {
-        // Use built-in logic from ws then attach custom properties to ws from auth
-        wsHandleUpgrade(req, socket, upgradeHead, (authenticatedClient: ExtendedWebSocket) => {
-          if (account) {
-            authenticatedClient.accountId = account
-            authenticatedClient.accountInfo = info
-          }
-          callback(authenticatedClient)
-        })
-      }).catch((e) => {
-        throw e
-      })
-    }
+    // const wsHandleUpgrade = this._wss.handleUpgrade.bind(this._wss)
+    // this._wss.handleUpgrade = (req: http.IncomingMessage, socket: any, upgradeHead: Buffer, callback: (client: WebSocket) => void) => {
+    //   authenticate(req).then(({ account, info }) => {
+    //     // Use built-in logic from ws then attach custom properties to ws from auth
+    //     wsHandleUpgrade(req, socket, upgradeHead, (authenticatedClient: ExtendedWebSocket) => {
+    //       if (account) {
+    //         authenticatedClient.accountId = account
+    //         authenticatedClient.accountInfo = info
+    //       }
+    //       callback(authenticatedClient)
+    //     })
+    //   }).catch((e) => {
+    //     throw e
+    //   })
+    // }
 
-    this._wss.on('connection', (ws: WebSocket, request: http.IncomingMessage) => {
-      const accountId = (ws as ExtendedWebSocket).accountId
-      const accountInfo = (ws as ExtendedWebSocket).accountInfo
-      const log = createLogger('btp-server:' + accountId)
-      const btpSocket = new BtpSocket(ws, { accountId, accountInfo }, { log })
-      this.emit('connection', btpSocket)
-    })
+    this._grpc.addService(interledger.Interledger.service, { Stream: this._handleNewStream.bind(this) })
+    this._grpc.bind('0.0.0.0:5005', ServerCredentials.createInsecure())
+    this._grpc.start()
+    this.emit('listening')
+  }
 
-    server.listen(options, () => {
-      if (unixSocket) {
-        process.on('SIGINT', () => {
-          try {
-            fs.unlinkSync(`${options.path}`)
-          } catch (e) {
-            console.error(e)
-          }
-          process.exit(128 + SIGINT)
-        })
-      }
-      this.emit('listening')
-    })
+  _handleNewStream (call: any) {
+    const accountId = call.metadata.get('accountId')[0]
+    const log = createLogger('btp-server:' + accountId)
+    const accountInfo = { } as AccountInfo
+    const btpStream = new BtpStream(call, { accountId, accountInfo },{ log })
+    this.emit('connection', btpStream)
   }
 
 }

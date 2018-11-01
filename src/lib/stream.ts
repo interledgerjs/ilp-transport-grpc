@@ -10,24 +10,45 @@ import { AccountInfo, createLogger, IlpLogger, ModuleConstructorOptions, ModuleS
 
 const log = createLogger('btp-socket')
 
+import {
+    ClientDuplexStream,
+    loadPackageDefinition,
+    credentials,
+    Metadata,
+    MetadataValue
+} from 'grpc'
+
+const PROTO_PATH = __dirname + '/btp.proto'
+const protoLoader = require('@grpc/proto-loader')
+const packageDefinition = protoLoader.loadSync(
+    PROTO_PATH,
+  {keepCase: true,
+    longs: String,
+    enums: String,
+    defaults: true,
+    oneofs: true
+  })
+const protoDescriptor = loadPackageDefinition(packageDefinition)
+export const interledger = protoDescriptor.interledger
+
 export interface BtpAuthResponse {
   account?: string
   info?: AccountInfo
 }
 
-export interface BtpSocketOptions extends ModuleConstructorOptions {
+export interface BtpStreamOptions extends ModuleConstructorOptions {
   accountId?: string
   accountInfo?: AccountInfo
   gcIntervalMs?: number
   gcMessageExpiryMs?: number
 }
 
-export interface BtpSocketServices extends ModuleServices {
+export interface BtpStreamServices extends ModuleServices {
 }
 
-export class BtpSocket extends EventEmitter {
+export class BtpStream extends EventEmitter {
   private _log: IlpLogger
-  private _socket: WebSocket
+  private _stream: ClientDuplexStream<any, any>
   private _sentMessages: Map<string, SentMessage>
   private _receivedMessages: Map<string, ReceivedMessage>
   private _accountId?: string
@@ -36,9 +57,9 @@ export class BtpSocket extends EventEmitter {
   private _gcIntervalMs: number
   private _gcMessageExpiryMs: number
 
-  constructor (webSocket: WebSocket, options: BtpSocketOptions, services: BtpSocketServices) {
+  constructor (stream: any, options: BtpStreamOptions, services: BtpStreamServices) {
     super()
-    this._socket = webSocket
+    this._stream = stream
     this._sentMessages = new Map()
     this._receivedMessages = new Map()
 
@@ -49,22 +70,22 @@ export class BtpSocket extends EventEmitter {
     this._gcIntervalMs = options.gcIntervalMs || 1000 // Run GC every second
     this._gcMessageExpiryMs = options.gcMessageExpiryMs || 5 * 60 * 1000 // Clean up messages that have not changed for more than 5 minutes
 
-    this._socket.on('message', (data: Buffer) => {
-      this._handleData(data)
+    this._stream.on('data', (data: any) => {
+      this._handleData(data.data)
     })
 
-    this._socket.on('error', (code: number, reason: string) => {
-      this.emit('error', new SError(`EWSERROR ${code} ${reason}`))
-    })
-
-    this._socket.on('close', (code: number, reason: string) => {
-      this.emit('close', code, reason)
-    })
-
-    // TODO - Should we do more here?
-    this._socket.on('ping', (data: Buffer) => {
-      this._socket.pong(data)
-    })
+    // this._socket.on('error', (code: number, reason: string) => {
+    //   this.emit('error', new SError(`EWSERROR ${code} ${reason}`))
+    // })
+    //
+    // this._socket.on('close', (code: number, reason: string) => {
+    //   this.emit('close', code, reason)
+    // })
+    //
+    // // TODO - Should we do more here?
+    // this._socket.on('ping', (data: Buffer) => {
+    //   this._socket.pong(data)
+    // })
 
     this._gcMessages()
   }
@@ -103,7 +124,7 @@ export class BtpSocket extends EventEmitter {
   }
 
   public get state () {
-    return this._socket.readyState
+    return true // this._stream.status()
   }
 
   /**
@@ -434,7 +455,7 @@ export class BtpSocket extends EventEmitter {
   }
   private _send (packet: BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket , cb: () => void) {
     this._log.debug(`send: ${btpPacketToString(packet)}`)
-    this._socket.send(serializePacket(packet), (error?: Error) => {
+    this._stream.write({ data: serializePacket(packet) }, (error?: Error) => {
       if (error) {
         throw error
       }
@@ -458,24 +479,31 @@ export class BtpSocket extends EventEmitter {
   }
 }
 
-export async function createConnection (address: string, options: BtpSocketOptions & WebSocket.ClientOptions) {
+export async function createConnection (address: string, options: BtpStreamOptions & WebSocket.ClientOptions) {
 
   const optionsWithDefaults = Object.assign({
     setHost: false
   }, options)
-  const socket = new WebSocket(address, ['btp3'], optionsWithDefaults)
-  const btpSocket = new BtpSocket(socket, {}, {
+  const grpc = new interledger.Interledger(address,
+      credentials.createInsecure())
+  let meta = new Metadata()
+  meta.add('accountId', this._accountId as MetadataValue || 'test')
+
+  const stream = grpc.Stream(meta)
+  const btpStream = new BtpStream(stream, {}, {
     log: createLogger('btp-socket')
   })
-  return new Promise<BtpSocket>((resolve, error) => {
-    const timeout = setTimeout(() => {
-      socket.close()
-      error()
-    }, 5000)
-    socket.once('open', () => {
-      clearTimeout(timeout)
-      resolve(btpSocket)
-    })
-  })
+  return btpStream
+
+  // return new Promise<BtpStream>((resolve, error) => {
+  //   const timeout = setTimeout(() => {
+  //     stream.close()
+  //     error()
+  //   }, 5000)
+  //     btpStream.once('open', () => {
+  //     clearTimeout(timeout)
+  //     resolve(btpStream)
+  //   })
+  // })
 
 }

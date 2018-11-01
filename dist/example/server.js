@@ -9,12 +9,12 @@ const server = new lib_1.BtpServer({}, {
 server.on('listening', () => {
     console.log('Listening...');
 });
-server.on('connection', (socket) => {
-    console.log(`CONNECTION: state=${socket.state}`);
-    socket.on('message', (message) => {
+server.on('connection', (stream) => {
+    console.log(`CONNECTION: state=${stream.state}`);
+    stream.on('message', (message) => {
         console.log(`MESSAGE (protocol=${message.protocol}): ${message.payload.toString()}`);
     });
-    socket.on('request', (message, replyCallback) => {
+    stream.on('request', (message, replyCallback) => {
         console.log(`REQUEST (protocol=${message.protocol}): ${message.payload.toString()}`);
         replyCallback(new Promise((respond) => {
             setTimeout(() => {
@@ -23,9 +23,10 @@ server.on('connection', (socket) => {
                     contentType: lib_1.BtpMessageContentType.ApplicationOctetStream,
                     payload: Buffer.from('Goodbye!')
                 });
-            }, 1000);
+            }, 0);
         }));
     });
+    stream.on('error', (error) => console.log(error));
 });
 server.listen({
     path: '/tmp/btp-server.sock'

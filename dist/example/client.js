@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const lib_1 = require("../lib");
 (async () => {
-    const client = await lib_1.createConnection('ws+unix:///tmp/btp-server.sock', {
+    const client = await lib_1.createConnection('127.0.0.1:5005', {
         headers: {
             authorization: 'Bearer TOKEN'
         }
