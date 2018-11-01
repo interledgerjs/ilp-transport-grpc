@@ -1,4 +1,5 @@
 import * as WebSocket from 'ws'
+import { SError } from 'verror'
 import { BtpMessage, BtpErrorMessage, BtpMessagePacket, BtpResponsePacket, BtpErrorMessagePacket, BtpPacketType, deserializePacket, isBtpMessage, isBtpResponse, isBtpError, BtpAckPacket, isBtpAck, serializePacket, btpMessageToString, btpPacketToString, BtpMessageContentType } from './packet'
 import UUID from './uuid'
 import { SentMessage } from './sentMessage'
@@ -17,6 +18,8 @@ export interface BtpAuthResponse {
 export interface BtpSocketOptions extends ModuleConstructorOptions {
   accountId?: string
   accountInfo?: AccountInfo
+  gcIntervalMs?: number
+  gcMessageExpiryMs?: number
 }
 
 export interface BtpSocketServices extends ModuleServices {
@@ -29,6 +32,10 @@ export class BtpSocket extends EventEmitter {
   private _receivedMessages: Map<string, ReceivedMessage>
   private _accountId?: string
   private _accountInfo?: AccountInfo
+
+  private _gcIntervalMs: number
+  private _gcMessageExpiryMs: number
+
   constructor (webSocket: WebSocket, options: BtpSocketOptions, services: BtpSocketServices) {
     super()
     this._socket = webSocket
@@ -39,16 +46,19 @@ export class BtpSocket extends EventEmitter {
     this._accountId = options.accountId
     this._accountInfo = options.accountInfo
 
+    this._gcIntervalMs = options.gcIntervalMs || 1000 // Run GC every second
+    this._gcMessageExpiryMs = options.gcMessageExpiryMs || 5 * 60 * 1000 // Clean up messages that have not changed for more than 5 minutes
+
     this._socket.on('message', (data: Buffer) => {
       this._handleData(data)
     })
 
     this._socket.on('error', (code: number, reason: string) => {
-      this.emit('error', new Error(`WSERROR ${code} ${reason}`))
+      this.emit('error', new SError(`EWSERROR ${code} ${reason}`))
     })
 
     this._socket.on('close', (code: number, reason: string) => {
-      // TODO - Handle close
+      this.emit('close', code, reason)
     })
 
     // TODO - Should we do more here?
@@ -56,6 +66,7 @@ export class BtpSocket extends EventEmitter {
       this._socket.pong(data)
     })
 
+    this._gcMessages()
   }
 
   public get isAuthorized (): boolean {
@@ -169,23 +180,24 @@ export class BtpSocket extends EventEmitter {
   }
 
   private _handleData (data: Buffer): void {
-    const packet = deserializePacket(data)
-    this._log.debug(`receive: ${btpPacketToString(packet)}`)
-    if (isBtpMessage(packet)) {
-      if (packet.type === BtpPacketType.MESSAGE) {
-        this._handleMessage(packet)
-      } else {
-        this._handleRequest(packet)
+    try {
+      const packet = deserializePacket(data)
+      this._log.debug(`receive: ${btpPacketToString(packet)}`)
+      if (isBtpMessage(packet)) {
+        if (packet.type === BtpPacketType.MESSAGE) {
+          this._handleMessage(packet)
+        } else {
+          this._handleRequest(packet)
+        }
+      } else if (isBtpResponse(packet)) {
+        this._handleResponse(packet)
+      } else if (isBtpError(packet)) {
+        this._handleError(packet)
+      } else if (isBtpAck(packet)) {
+        this._handleAck(packet)
       }
-    } else if (isBtpResponse(packet)) {
-      this._handleResponse(packet)
-    } else if (isBtpError(packet)) {
-      this._handleError(packet)
-    } else if (isBtpAck(packet)) {
-      this._handleAck(packet)
-    } else {
-      // Unknown Type
-
+    } catch (e) {
+      this.emit('error', new SError(e, `Unable to deserialize BTP message: ${data.toString('hex')}`))
     }
   }
 
@@ -430,6 +442,19 @@ export class BtpSocket extends EventEmitter {
         cb()
       }
     })
+  }
+  private _gcMessages () {
+    this._sentMessages.forEach((message, messageId) => {
+      if (Date.now() - message.lastModified > this._gcMessageExpiryMs) {
+        this._sentMessages.delete(messageId)
+      }
+    })
+    this._receivedMessages.forEach((message, messageId) => {
+      if (Date.now() - message.lastModified > this._gcMessageExpiryMs) {
+        this._receivedMessages.delete(messageId)
+      }
+    })
+    setTimeout(this._gcMessages.bind(this), this._gcIntervalMs)
   }
 }
 

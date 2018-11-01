@@ -86,10 +86,10 @@ export function deserializePacket (data: Buffer): BtpPacket {
             correlationId
           } as BtpAckPacket
         default:
-          throw new BtpError(BtpErrorCode.NotAcceptedError, `Invalid packet type: ${type}`)
+          throw new Error(`Invalid packet type: ${type}`)
       }
     default:
-      throw new BtpError(BtpErrorCode.NotAcceptedError, `Invalid packet type: ${type}`)
+      throw new Error(`Invalid packet type: ${type}`)
   }
 
 }
