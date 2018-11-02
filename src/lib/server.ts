@@ -78,46 +78,6 @@ export class BtpServer extends EventEmitter {
 
     this._grpc = new Server()
 
-    // Handle UNIX sockets that weren't cleaned up properly
-    // this._wss.on('error', (e: any) => {
-    //   if (e.code === 'EADDRINUSE' && unixSocket) {
-    //     this._log.warn(`${options.path} in use, attempting to clean up.`)
-    //     const tempClientSocket = new net.Socket()
-    //     tempClientSocket.on('error', (ce: any) => {
-    //       if (ce.code === 'ECONNREFUSED') {  // No other server listening
-    //         this._log.warn(`No server listening at ${options.path}. Removing file and trying again.`)
-    //         fs.unlinkSync(`${options.path}`)
-    //         server.close()
-    //         server.listen(`${options.path}`)
-    //       }
-    //     })
-    //     tempClientSocket.connect({ path: options.path! }, () => {
-    //       this._log.error(`Another server is listening on ${options.path}.`)
-    //       this.emit('error', e)
-    //     })
-    //   } else {
-    //     log.error(e)
-    //     this.emit('error', e)
-    //   }
-    // })
-
-    // Override handleUpgrade to authenticate
-    // const wsHandleUpgrade = this._wss.handleUpgrade.bind(this._wss)
-    // this._wss.handleUpgrade = (req: http.IncomingMessage, socket: any, upgradeHead: Buffer, callback: (client: WebSocket) => void) => {
-    //   authenticate(req).then(({ account, info }) => {
-    //     // Use built-in logic from ws then attach custom properties to ws from auth
-    //     wsHandleUpgrade(req, socket, upgradeHead, (authenticatedClient: ExtendedWebSocket) => {
-    //       if (account) {
-    //         authenticatedClient.accountId = account
-    //         authenticatedClient.accountInfo = info
-    //       }
-    //       callback(authenticatedClient)
-    //     })
-    //   }).catch((e) => {
-    //     throw e
-    //   })
-    // }
-
     this._grpc.addService(interledger.Interledger.service, { Stream: this._handleNewStream.bind(this) })
     this._grpc.bind(options.host + ':' + options.port, ServerCredentials.createInsecure())
     this._grpc.start()
