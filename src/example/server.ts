@@ -30,5 +30,6 @@ server.on('connection', (stream: BtpStream) => {
 })
 
 server.listen({
-  path: '/tmp/btp-server.sock'
+  host: '0.0.0.0',
+  port: 5001
 })

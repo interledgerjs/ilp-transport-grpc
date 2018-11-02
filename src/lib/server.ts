@@ -27,20 +27,23 @@ const packageDefinition = protoLoader.loadSync(
 const protoDescriptor = loadPackageDefinition(packageDefinition)
 export const interledger = protoDescriptor.interledger
 
-export interface BtpServerOptions extends ModuleConstructorOptions, https.ServerOptions {
+export interface BtpServerOptions extends ModuleConstructorOptions {
   secure?: boolean
 }
 
 export interface BtpServerServices extends ModuleServices {
   authenticate?: (req: http.IncomingMessage) => Promise<BtpAuthResponse>
 }
-export interface BtpServerListenOptions extends net.ListenOptions {
+export interface BtpServerListenOptions {
+  host: string,
+  port: number
 }
 interface ExtendedWebSocket extends WebSocket {
   accountId?: string
   accountInfo?: AccountInfo
 }
 export class BtpServer extends EventEmitter {
+  protected _address: string
   protected _log: IlpLogger
   protected _grpc: Server
   protected _authenticate: (req: http.IncomingMessage) => Promise<BtpAuthResponse>
@@ -51,11 +54,10 @@ export class BtpServer extends EventEmitter {
   }
   public async listen (options: BtpServerListenOptions): Promise<void> {
 
-    if (!options.path && !options.port) {
-      throw new Error(`Either a path or port must be provided`)
+    if (!options.host && !options.port) {
+      throw new Error(`Both host and port must be provided`)
     }
     const log = this._log
-    const unixSocket = options.path && !options.port
     const authenticate = this._authenticate
 
     const handleProtocols = (protocols: string[], req: http.IncomingMessage): string | false => {
@@ -118,7 +120,7 @@ export class BtpServer extends EventEmitter {
     // }
 
     this._grpc.addService(interledger.Interledger.service, { Stream: this._handleNewStream.bind(this) })
-    this._grpc.bind('0.0.0.0:5005', ServerCredentials.createInsecure())
+    this._grpc.bind(options.host + ':' + options.port, ServerCredentials.createInsecure())
     this._grpc.start()
     this.emit('listening')
   }

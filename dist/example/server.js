@@ -29,6 +29,7 @@ server.on('connection', (stream) => {
     stream.on('error', (error) => console.log(error));
 });
 server.listen({
-    path: '/tmp/btp-server.sock'
+    host: '0.0.0.0',
+    port: 5001
 });
 //# sourceMappingURL=server.js.map

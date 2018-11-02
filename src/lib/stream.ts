@@ -15,7 +15,7 @@ import {
     loadPackageDefinition,
     credentials,
     Metadata,
-    MetadataValue
+    MetadataValue, ServerDuplexStream
 } from 'grpc'
 
 const PROTO_PATH = __dirname + '/btp.proto'
@@ -48,7 +48,7 @@ export interface BtpStreamServices extends ModuleServices {
 
 export class BtpStream extends EventEmitter {
   private _log: IlpLogger
-  private _stream: ClientDuplexStream<any, any>
+  private _stream: ClientDuplexStream<any, any> | ServerDuplexStream<any,any>
   private _sentMessages: Map<string, SentMessage>
   private _receivedMessages: Map<string, ReceivedMessage>
   private _accountId?: string
@@ -57,7 +57,7 @@ export class BtpStream extends EventEmitter {
   private _gcIntervalMs: number
   private _gcMessageExpiryMs: number
 
-  constructor (stream: any, options: BtpStreamOptions, services: BtpStreamServices) {
+  constructor (stream: ClientDuplexStream<any,any> | ServerDuplexStream<any,any>, options: BtpStreamOptions, services: BtpStreamServices) {
     super()
     this._stream = stream
     this._sentMessages = new Map()
@@ -74,18 +74,17 @@ export class BtpStream extends EventEmitter {
       this._handleData(data.data)
     })
 
-    // this._socket.on('error', (code: number, reason: string) => {
-    //   this.emit('error', new SError(`EWSERROR ${code} ${reason}`))
-    // })
-    //
+    this._stream.on('cancelled', (data: any) => {
+      console.log(data)
+    })
+
+    this._stream.on('error', (data: any) => {
+      console.log(data)
+    })
     // this._socket.on('close', (code: number, reason: string) => {
     //   this.emit('close', code, reason)
     // })
     //
-    // // TODO - Should we do more here?
-    // this._socket.on('ping', (data: Buffer) => {
-    //   this._socket.pong(data)
-    // })
 
     this._gcMessages()
   }
@@ -203,6 +202,7 @@ export class BtpStream extends EventEmitter {
   private _handleData (data: Buffer): void {
     try {
       const packet = deserializePacket(data)
+      console.log(packet)
       this._log.debug(`receive: ${btpPacketToString(packet)}`)
       if (isBtpMessage(packet)) {
         if (packet.type === BtpPacketType.MESSAGE) {
@@ -479,11 +479,8 @@ export class BtpStream extends EventEmitter {
   }
 }
 
-export async function createConnection (address: string, options: BtpStreamOptions & WebSocket.ClientOptions) {
+export async function createConnection (address: string, options: BtpStreamOptions) {
 
-  const optionsWithDefaults = Object.assign({
-    setHost: false
-  }, options)
   const grpc = new interledger.Interledger(address,
       credentials.createInsecure())
   let meta = new Metadata()
@@ -493,6 +490,11 @@ export async function createConnection (address: string, options: BtpStreamOptio
   const btpStream = new BtpStream(stream, {}, {
     log: createLogger('btp-socket')
   })
+  const channel = grpc.getChannel()
+  channel.watchConnectivityState(channel.getConnectivityState(true),0, (error: any) => {
+    console.log(error)
+  })
+
   return btpStream
 
   // return new Promise<BtpStream>((resolve, error) => {
