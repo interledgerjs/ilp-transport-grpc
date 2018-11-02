@@ -477,7 +477,7 @@ export async function createConnection (address: string, options: BtpStreamOptio
   meta.add('accountAssetScale', String(accountInfo.assetScale) as MetadataValue)
 
   const stream = grpc.Stream(meta)
-  const btpStream = new BtpStream(stream, {}, {
+  const btpStream = new BtpStream(stream, { accountId: options.accountId, accountInfo: options.accountInfo } , {
     log: createLogger('btp-socket')
   })
   const channel = grpc.getChannel()
