@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "description": "BTPv3 implementation",
   "main": "dist/lib/index.js",
+  "types": "dist/lib/index.d.ts",
   "files": [
     "src/lib/**/*.ts",
     "src/lib/**/*.ts",
