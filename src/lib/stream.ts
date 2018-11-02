@@ -18,7 +18,7 @@ import {
     MetadataValue, ServerDuplexStream
 } from 'grpc'
 
-const PROTO_PATH = __dirname + '/btp.proto'
+const PROTO_PATH = __dirname + '/../../src/lib/btp.proto'
 const protoLoader = require('@grpc/proto-loader')
 const packageDefinition = protoLoader.loadSync(
     PROTO_PATH,
