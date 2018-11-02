@@ -9,7 +9,7 @@ export {
 export * from './uuid'
 
 export {
-  BtpPacketType, BtpMessageContentType, serializePacket, deserializePacket,
+  BtpPacketType, BtpMessageContentType,
   BtpPacket, BtpReplyPacket, BtpMessagePacket, BtpResponsePacket, BtpErrorMessagePacket, BtpAckPacket,
   BtpMessage, BtpErrorMessage,
   btpPacketToString, btpMessageToString, btpErrorMessageToString, btpAckToString,

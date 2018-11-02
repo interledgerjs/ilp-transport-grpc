@@ -3,14 +3,19 @@ syntax = "proto3";
 package interledger;
 
 service Interledger {
-    rpc Stream (stream bytes) returns (stream bytes) {}
+    rpc Stream (stream BtpPacket) returns (stream BtpPacket) {}
 }
 
-//message BtpPacket {
-//    uint32 requestId = 1;
-//    int32 type = 2;
-//    BtpPacketData data = 3;
-//}
+message BtpPacket {
+    int32 type = 1;
+    string id = 2;
+    string correlationId = 3;
+    string protocol = 4;
+    int32 contentType = 5;
+    bytes payload = 6;
+    string code = 7;
+    string message = 8;
+}
 //
 //message BtpPacketData {
 //    repeated BtpSubProtocol protocolData = 1;

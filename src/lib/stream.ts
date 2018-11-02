@@ -1,6 +1,6 @@
 import * as WebSocket from 'ws'
 import { SError } from 'verror'
-import { BtpMessage, BtpErrorMessage, BtpMessagePacket, BtpResponsePacket, BtpErrorMessagePacket, BtpPacketType, deserializePacket, isBtpMessage, isBtpResponse, isBtpError, BtpAckPacket, isBtpAck, serializePacket, btpMessageToString, btpPacketToString, BtpMessageContentType } from './packet'
+import { BtpMessage, BtpErrorMessage, BtpMessagePacket, BtpResponsePacket, BtpErrorMessagePacket, BtpPacketType, isBtpMessage, isBtpResponse, isBtpError, BtpAckPacket, isBtpAck, btpMessageToString, btpPacketToString, BtpMessageContentType } from './packet'
 import UUID from './uuid'
 import { SentMessage } from './sentMessage'
 import { BtpError, BtpErrorCode } from './error'
@@ -71,16 +71,17 @@ export class BtpStream extends EventEmitter {
     this._gcMessageExpiryMs = options.gcMessageExpiryMs || 5 * 60 * 1000 // Clean up messages that have not changed for more than 5 minutes
 
     this._stream.on('data', (data: any) => {
-      this._handleData(data.data)
+      this._handleData(data)
     })
 
     this._stream.on('cancelled', (data: any) => {
       console.log(data)
     })
 
-    this._stream.on('error', (data: any) => {
-      console.log(data)
+    this._stream.on('error', (error: any) => {
+      this.emit('error', error)
     })
+
     // this._socket.on('close', (code: number, reason: string) => {
     //   this.emit('close', code, reason)
     // })
@@ -135,7 +136,7 @@ export class BtpStream extends EventEmitter {
     return new Promise<void>((ackCallback, errorCallback) => {
       const id = new UUID()
       const type = BtpPacketType.MESSAGE
-      const packet = Object.assign({ id, type }, message)
+      const packet = Object.assign({ id: id.toString(), type }, message)
 
       const sentMessage = new SentMessage({ packet })
         .on('ack', () => { ackCallback() })
@@ -149,7 +150,7 @@ export class BtpStream extends EventEmitter {
         .on('timeout', () => {
           this._send(packet, sentMessage.sent.bind(sentMessage))
         })
-      this._sentMessages.set(packet.id.toString(), sentMessage)
+      this._sentMessages.set(packet.id, sentMessage)
       this._send(packet, sentMessage.sent.bind(sentMessage))
     })
   }
@@ -169,7 +170,7 @@ export class BtpStream extends EventEmitter {
     return new Promise<BtpMessage>((responseCallback, errorCallback) => {
       const id = new UUID()
       const type = BtpPacketType.REQUEST
-      const packet = Object.assign({ id, type }, message)
+      const packet = Object.assign({ id: id.toString(), type }, message)
       let acknowledged = false
 
       const sentRequest = new SentMessage({ packet })
@@ -199,11 +200,8 @@ export class BtpStream extends EventEmitter {
     })
   }
 
-  private _handleData (data: Buffer): void {
+  private _handleData (packet: any): void {
     try {
-      const packet = deserializePacket(data)
-      console.log(packet)
-      console.log(`receive: ${btpPacketToString(packet)}`)
       if (isBtpMessage(packet)) {
         if (packet.type === BtpPacketType.MESSAGE) {
           this._handleMessage(packet)
@@ -218,7 +216,7 @@ export class BtpStream extends EventEmitter {
         this._handleAck(packet)
       }
     } catch (e) {
-      this.emit('error', new SError(e, `Unable to deserialize BTP message: ${data.toString('hex')}`))
+      this.emit('error', new SError(e, `Unable to deserialize BTP message: ${packet.toString('hex')}`))
     }
   }
 
@@ -231,14 +229,14 @@ export class BtpStream extends EventEmitter {
       // TODO Deal with possible DoS attack where same message is received multiple time using same ID
       if (Number(prevReceivedMessage.state) === Number(ReceivedMessageState.ACK_SENT)) {
         this._send({
-          id: new UUID(),
+          id: new UUID().toString(),
           correlationId: packet.id,
           type: BtpPacketType.ACK
         } as BtpAckPacket,
         prevReceivedMessage.acknowledged.bind(prevReceivedMessage))
       } else if (Number(prevReceivedMessage.state) === Number(ReceivedMessageState.ERROR_SENT)) {
         this._send(
-          Object.assign(prevReceivedMessage.error, { id: new UUID() }),
+          Object.assign(prevReceivedMessage.error, { id: new UUID().toString() }),
           prevReceivedMessage.errorSent.bind(prevReceivedMessage))
       } else {
         // TODO We are getting the same repeated message but not responding.
@@ -248,7 +246,7 @@ export class BtpStream extends EventEmitter {
       const receivedMessage = new ReceivedMessage({ packet })
       this._receivedMessages.set(packet.id.toString(), receivedMessage)
       const ackPacket = {
-        id: new UUID(),
+        id: new UUID().toString(),
         correlationId: packet.id,
         type: BtpPacketType.ACK
       } as BtpAckPacket
@@ -257,7 +255,7 @@ export class BtpStream extends EventEmitter {
         receivedMessage.acknowledged.bind(receivedMessage))
       this.emit('message', packet, (error: BtpError) => {
         const errorPacket = {
-          id: new UUID(),
+          id: new UUID().toString(),
           correlationId: packet.id,
           type: BtpPacketType.ERROR,
           code: BtpErrorCode.NotAcceptedError, // TODO Map BtpError to correct code
@@ -278,18 +276,18 @@ export class BtpStream extends EventEmitter {
       // TODO Deal with possible DoS attack where same message is received multiple time using same ID
       if (Number(prevReceivedRequest.state) === Number(ReceivedMessageState.ACK_SENT)) {
         this._send({
-          id: new UUID(),
+          id: new UUID().toString(),
           correlationId: packet.id,
           type: BtpPacketType.ACK
         } as BtpAckPacket,
         prevReceivedRequest.acknowledged.bind(prevReceivedRequest))
       } else if (Number(prevReceivedRequest.state) === Number(ReceivedMessageState.RESPONSE_SENT)) {
-        const responsePacket = Object.assign(prevReceivedRequest.response, { id: new UUID() })
+        const responsePacket = Object.assign(prevReceivedRequest.response, { id: new UUID().toString() })
         this._send(
           responsePacket,
           prevReceivedRequest.responseSent.bind(prevReceivedRequest))
       } else if (Number(prevReceivedRequest.state) === Number(ReceivedMessageState.ERROR_SENT)) {
-        const errorPacket = Object.assign(prevReceivedRequest.error, { id: new UUID() })
+        const errorPacket = Object.assign(prevReceivedRequest.error, { id: new UUID().toString() })
         this._send(
           errorPacket,
           prevReceivedRequest.errorSent.bind(prevReceivedRequest))
@@ -301,7 +299,7 @@ export class BtpStream extends EventEmitter {
       const receivedRequest = new ReceivedMessage({ packet })
       this._receivedMessages.set(packet.id.toString(), receivedRequest)
       const ackPacket = {
-        id: new UUID(),
+        id: new UUID().toString(),
         correlationId: packet.id,
         type: BtpPacketType.ACK
       } as BtpAckPacket
@@ -314,7 +312,7 @@ export class BtpStream extends EventEmitter {
             this._reply(receivedRequest, asyncReply)
           }).catch(error => {
             const errorPacket = Object.assign({
-              id: new UUID(),
+              id: new UUID().toString(),
               correlationId: packet.id,
               type: BtpPacketType.ERROR,
               code: BtpErrorCode.NotAcceptedError
@@ -330,14 +328,14 @@ export class BtpStream extends EventEmitter {
   private _reply (receivedRequest: ReceivedMessage, reply: BtpErrorMessage | BtpMessage) {
     if (reply instanceof BtpError) {
       const errorPacket = Object.assign({
-        id: new UUID(),
+        id: new UUID().toString(),
         correlationId: receivedRequest.packet.id,
         type: BtpPacketType.ERROR
       }, reply) as BtpErrorMessagePacket
       this._send(errorPacket, receivedRequest.errorSent.bind(receivedRequest, errorPacket))
     } else {
       const responsePacket = Object.assign({
-        id: new UUID(),
+        id: new UUID().toString(),
         correlationId: receivedRequest.packet.id,
         type: BtpPacketType.RESPONSE
       }, reply) as BtpResponsePacket
@@ -347,7 +345,6 @@ export class BtpStream extends EventEmitter {
 
   private _handleResponse (packet: BtpResponsePacket): void {
 
-    console.log('PACKET', packet)
     // Idempotency - just send ack for same response
     const prevReceivedResponse = this._receivedMessages.get(packet.id.toString())
     if (prevReceivedResponse) {
@@ -355,13 +352,13 @@ export class BtpStream extends EventEmitter {
       // TODO Deal with possible DoS attack where same message is received multiple times using same ID
       if (Number(prevReceivedResponse.state) === Number(ReceivedMessageState.ACK_SENT)) {
         this._send({
-          id: new UUID(),
+          id: new UUID().toString(),
           correlationId: packet.id,
           type: BtpPacketType.ACK
         } as BtpAckPacket,
         prevReceivedResponse.acknowledged.bind(prevReceivedResponse))
       } else if (Number(prevReceivedResponse.state) === Number(ReceivedMessageState.ERROR_SENT)) {
-        const errorPacket = Object.assign(prevReceivedResponse.error, { id: new UUID() })
+        const errorPacket = Object.assign(prevReceivedResponse.error, { id: new UUID().toString() })
         this._send(
           errorPacket,
           prevReceivedResponse.errorSent.bind(prevReceivedResponse, errorPacket))
@@ -373,11 +370,9 @@ export class BtpStream extends EventEmitter {
       const receivedResponse = new ReceivedMessage({ packet })
       this._receivedMessages.set(packet.id.toString(), receivedResponse)
       const originalRequest = this._sentMessages.get(packet.correlationId.toString())
-      console.log(this._sentMessages.size)
       if (!originalRequest) {
-        console.log('request not found')
         const errorPacket = {
-          id: new UUID(),
+          id: new UUID().toString(),
           correlationId: packet.id,
           type: BtpPacketType.ERROR,
           code: BtpErrorCode.UnknownCorrelationId,
@@ -388,7 +383,7 @@ export class BtpStream extends EventEmitter {
           receivedResponse.errorSent.bind(receivedResponse))
       } else {
         this._send({
-          id: new UUID(),
+          id: new UUID().toString(),
           correlationId: packet.id,
           type: BtpPacketType.ACK
         } as BtpAckPacket,
@@ -407,13 +402,13 @@ export class BtpStream extends EventEmitter {
       // TODO Deal with possible DoS attack where same message is received multiple times using same ID
       if (Number(prevReceivedError.state) === Number(ReceivedMessageState.ACK_SENT)) {
         this._send({
-          id: new UUID(),
+          id: new UUID().toString(),
           correlationId: packet.id,
           type: BtpPacketType.ACK
         } as BtpAckPacket,
         prevReceivedError.acknowledged.bind(prevReceivedError))
       } else if (Number(prevReceivedError.state) === Number(ReceivedMessageState.ERROR_SENT)) {
-        const errorPacket = Object.assign(prevReceivedError.error, { id: new UUID() })
+        const errorPacket = Object.assign(prevReceivedError.error, { id: new UUID().toString() })
         this._send(
           errorPacket,
           prevReceivedError.errorSent.bind(prevReceivedError, errorPacket))
@@ -427,7 +422,7 @@ export class BtpStream extends EventEmitter {
       const originalRequest = this._sentMessages.get(packet.correlationId.toString())
       if (!originalRequest) {
         const errorPacket = {
-          id: new UUID(),
+          id: new UUID().toString(),
           correlationId: packet.id,
           type: BtpPacketType.ERROR,
           code: BtpErrorCode.UnknownCorrelationId,
@@ -438,7 +433,7 @@ export class BtpStream extends EventEmitter {
           receivedError.errorSent.bind(receivedError))
       } else {
         this._send({
-          id: new UUID(),
+          id: new UUID().toString(),
           correlationId: packet.id,
           type: BtpPacketType.ACK
         } as BtpAckPacket,
@@ -458,14 +453,16 @@ export class BtpStream extends EventEmitter {
   }
   private _send (packet: BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket , cb: () => void) {
     this._log.debug(`send: ${btpPacketToString(packet)}`)
-    this._stream.write({ data: serializePacket(packet) }, (error?: Error) => {
-      if (error) {
-        throw error
-      }
-      if (cb) {
-        cb()
-      }
-    })
+    // this._stream.write({ data: serializePacket(packet) }, ,(error: any) => {
+    //   if (error) {
+    //     throw error
+    //   }
+    //   if (cb) {
+    //     cb()
+    //   }
+    // })
+    // @ts-ignore
+    this._stream.write(packet)
   }
   private _gcMessages () {
     this._sentMessages.forEach((message, messageId) => {
@@ -494,21 +491,6 @@ export async function createConnection (address: string, options: BtpStreamOptio
     log: createLogger('btp-socket')
   })
   const channel = grpc.getChannel()
-  /*channel.watchConnectivityState(channel.getConnectivityState(true),0, (error: any) => {
-    console.log(error)
-  })*/
 
   return btpStream
-
-  // return new Promise<BtpStream>((resolve, error) => {
-  //   const timeout = setTimeout(() => {
-  //     stream.close()
-  //     error()
-  //   }, 5000)
-  //     btpStream.once('open', () => {
-  //     clearTimeout(timeout)
-  //     resolve(btpStream)
-  //   })
-  // })
-
 }
