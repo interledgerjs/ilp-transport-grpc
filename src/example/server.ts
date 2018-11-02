@@ -16,7 +16,7 @@ server.on('connection', (stream: BtpStream) => {
   console.log(`CONNECTION: state=${stream.state}`)
 
   stream.on('message', (message: BtpMessage) => {
-    console.log(`MESSAGE (protocol=${message.protocol}): ${message.payload.toString()}`)
+    // console.log(`MESSAGE (protocol=${message.protocol}): ${message.payload.toString()}`)
   })
 
   stream.on('request', (message: BtpMessage, replyCallback: (reply: BtpMessage | BtpError | Promise<BtpMessage | BtpError>) => void) => {

@@ -13,7 +13,6 @@ server.on('connection', (stream) => {
     const { accountId, accountInfo } = stream;
     console.log(`CONNECTION: state=${stream.state}`);
     stream.on('message', (message) => {
-        console.log(`MESSAGE (protocol=${message.protocol}): ${message.payload.toString()}`);
     });
     stream.on('request', (message, replyCallback) => {
         console.log(`REQUEST (protocol=${message.protocol}): ${message.payload.toString()}`);

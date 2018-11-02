@@ -18,7 +18,7 @@ const lib_1 = require("../lib");
     });
     console.time('test');
     let array = [];
-    for (let i = 0; i < 10000; i++) {
+    for (let i = 0; i < 100000; i++) {
         array.push(client.request({
             protocol: 'ilp',
             contentType: lib_1.BtpMessageContentType.ApplicationOctetStream,

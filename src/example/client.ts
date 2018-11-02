@@ -20,7 +20,7 @@ import { createConnection, BtpMessageContentType } from '../lib'
   console.time('test')
   let array = []
 
-  for (let i = 0; i < 10000; i++) {
+  for (let i = 0; i < 100000; i++) {
     array.push(client.request({
       protocol: 'ilp',
       contentType: BtpMessageContentType.ApplicationOctetStream,
