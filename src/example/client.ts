@@ -11,7 +11,7 @@ import { createConnection, BtpMessageContentType } from '../lib'
     console.log(data)
   })
 
-  await new Promise(res => setTimeout(res, 3000))
+  await new Promise(res => setTimeout(res, 1000))
 
   client.message({
     protocol: 'ilp',
@@ -19,12 +19,34 @@ import { createConnection, BtpMessageContentType } from '../lib'
     payload: Buffer.from('Hello World!')
   })
 
-  const resp = await client.request({
+  client.request({
     protocol: 'ilp',
     contentType: BtpMessageContentType.ApplicationOctetStream,
     payload: Buffer.from('Hello?')
+  }).then((resp) => {
+    console.log(`RESPONSE: ${resp.payload.toString()}`)
   })
-
-  console.log(`RESPONSE: ${resp.payload.toString()}`)
+  client.request({
+    protocol: 'ilp',
+    contentType: BtpMessageContentType.ApplicationOctetStream,
+    payload: Buffer.from('Hello?')
+  }).then((resp) => {
+    console.log(`RESPONSE: ${resp.payload.toString()}`)
+  })
+  client.request({
+    protocol: 'ilp',
+    contentType: BtpMessageContentType.ApplicationOctetStream,
+    payload: Buffer.from('Hello?')
+  }).then((resp) => {
+    console.log(`RESPONSE: ${resp.payload.toString()}`)
+  })
+  client.request({
+    protocol: 'ilp',
+    contentType: BtpMessageContentType.ApplicationOctetStream,
+    payload: Buffer.from('Hello?')
+  }).then((resp) => {
+    console.log(`RESPONSE: ${resp.payload.toString()}`)
+  })
+  //
 
 })()

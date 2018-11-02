@@ -86,7 +86,7 @@ export class BtpStream extends EventEmitter {
     // })
     //
 
-    this._gcMessages()
+    // this._gcMessages()
   }
 
   public get isAuthorized (): boolean {
@@ -203,7 +203,7 @@ export class BtpStream extends EventEmitter {
     try {
       const packet = deserializePacket(data)
       console.log(packet)
-      this._log.debug(`receive: ${btpPacketToString(packet)}`)
+      console.log(`receive: ${btpPacketToString(packet)}`)
       if (isBtpMessage(packet)) {
         if (packet.type === BtpPacketType.MESSAGE) {
           this._handleMessage(packet)
@@ -347,6 +347,7 @@ export class BtpStream extends EventEmitter {
 
   private _handleResponse (packet: BtpResponsePacket): void {
 
+    console.log('PACKET', packet)
     // Idempotency - just send ack for same response
     const prevReceivedResponse = this._receivedMessages.get(packet.id.toString())
     if (prevReceivedResponse) {
@@ -372,7 +373,9 @@ export class BtpStream extends EventEmitter {
       const receivedResponse = new ReceivedMessage({ packet })
       this._receivedMessages.set(packet.id.toString(), receivedResponse)
       const originalRequest = this._sentMessages.get(packet.correlationId.toString())
+      console.log(this._sentMessages.size)
       if (!originalRequest) {
+        console.log('request not found')
         const errorPacket = {
           id: new UUID(),
           correlationId: packet.id,
@@ -491,9 +494,9 @@ export async function createConnection (address: string, options: BtpStreamOptio
     log: createLogger('btp-socket')
   })
   const channel = grpc.getChannel()
-  channel.watchConnectivityState(channel.getConnectivityState(true),0, (error: any) => {
+  /*channel.watchConnectivityState(channel.getConnectivityState(true),0, (error: any) => {
     console.log(error)
-  })
+  })*/
 
   return btpStream
 
