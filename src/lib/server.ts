@@ -43,7 +43,6 @@ interface ExtendedWebSocket extends WebSocket {
   accountInfo?: AccountInfo
 }
 export class BtpServer extends EventEmitter {
-  protected _address: string
   protected _log: IlpLogger
   protected _grpc: Server
   protected _authenticate: (req: http.IncomingMessage) => Promise<BtpAuthResponse>
@@ -128,7 +127,11 @@ export class BtpServer extends EventEmitter {
   _handleNewStream (call: any) {
     const accountId = call.metadata.get('accountId')[0]
     const log = createLogger('btp-server:' + accountId)
-    const accountInfo = { } as AccountInfo
+    const accountInfo = {
+      relation: call.metadata.get('accountRelation')[0],
+      assetCode: call.metadata.get('accountAssetCode')[0],
+      assetScale: call.metadata.get('accountAssetScale')[0]
+    } as AccountInfo
     const btpStream = new BtpStream(call, { accountId, accountInfo },{ log })
     this.emit('connection', btpStream)
   }

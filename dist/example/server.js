@@ -10,6 +10,7 @@ server.on('listening', () => {
     console.log('Listening...');
 });
 server.on('connection', (stream) => {
+    const { accountId, accountInfo } = stream;
     console.log(`CONNECTION: state=${stream.state}`);
     stream.on('message', (message) => {
         console.log(`MESSAGE (protocol=${message.protocol}): ${message.payload.toString()}`);
@@ -27,6 +28,7 @@ server.on('connection', (stream) => {
         }));
     });
     stream.on('error', (error) => console.log(error));
+    stream.on('cancelled', (error) => console.log('cancelled', error));
 });
 server.listen({
     host: '0.0.0.0',

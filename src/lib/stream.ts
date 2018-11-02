@@ -37,8 +37,8 @@ export interface BtpAuthResponse {
 }
 
 export interface BtpStreamOptions extends ModuleConstructorOptions {
-  accountId?: string
-  accountInfo?: AccountInfo
+  accountId: string
+  accountInfo: AccountInfo
   gcIntervalMs?: number
   gcMessageExpiryMs?: number
 }
@@ -48,7 +48,7 @@ export interface BtpStreamServices extends ModuleServices {
 
 export class BtpStream extends EventEmitter {
   private _log: IlpLogger
-  private _stream: ClientDuplexStream<any, any> | ServerDuplexStream<any,any>
+  public _stream: ClientDuplexStream<BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket, BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket>
   private _sentMessages: Map<string, SentMessage>
   private _receivedMessages: Map<string, ReceivedMessage>
   private _accountId?: string
@@ -57,7 +57,7 @@ export class BtpStream extends EventEmitter {
   private _gcIntervalMs: number
   private _gcMessageExpiryMs: number
 
-  constructor (stream: ClientDuplexStream<any,any> | ServerDuplexStream<any,any>, options: BtpStreamOptions, services: BtpStreamServices) {
+  constructor (stream: ClientDuplexStream<BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket,BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket>, options: BtpStreamOptions, services: BtpStreamServices) {
     super()
     this._stream = stream
     this._sentMessages = new Map()
@@ -75,17 +75,12 @@ export class BtpStream extends EventEmitter {
     })
 
     this._stream.on('cancelled', (data: any) => {
-      console.log(data)
+      this.emit('cancelled', data)
     })
 
     this._stream.on('error', (error: any) => {
       this.emit('error', error)
     })
-
-    // this._socket.on('close', (code: number, reason: string) => {
-    //   this.emit('close', code, reason)
-    // })
-    //
 
     // this._gcMessages()
   }
@@ -453,15 +448,6 @@ export class BtpStream extends EventEmitter {
   }
   private _send (packet: BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket , cb: () => void) {
     this._log.debug(`send: ${btpPacketToString(packet)}`)
-    // this._stream.write({ data: serializePacket(packet) }, ,(error: any) => {
-    //   if (error) {
-    //     throw error
-    //   }
-    //   if (cb) {
-    //     cb()
-    //   }
-    // })
-    // @ts-ignore
     this._stream.write(packet)
   }
   private _gcMessages () {
@@ -484,7 +470,11 @@ export async function createConnection (address: string, options: BtpStreamOptio
   const grpc = new interledger.Interledger(address,
       credentials.createInsecure())
   let meta = new Metadata()
-  meta.add('accountId', this._accountId as MetadataValue || 'test')
+  const accountInfo = options.accountInfo
+  meta.add('accountId', options.accountId as MetadataValue || 'test')
+  meta.add('accountRelation', accountInfo.relation as MetadataValue)
+  meta.add('accountAssetCode', accountInfo.assetCode as MetadataValue)
+  meta.add('accountAssetScale', String(accountInfo.assetScale) as MetadataValue)
 
   const stream = grpc.Stream(meta)
   const btpStream = new BtpStream(stream, {}, {

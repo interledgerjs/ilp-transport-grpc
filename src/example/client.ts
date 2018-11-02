@@ -4,6 +4,12 @@ import { createConnection, BtpMessageContentType } from '../lib'
   const client = await createConnection('127.0.0.1:5001', {
     headers: {
       authorization: 'Bearer TOKEN'
+    },
+    accountId: 'test',
+    accountInfo: {
+      relation: 'child',
+      assetScale: 9,
+      assetCode: 'xrp'
     }
   })
 
@@ -11,42 +17,18 @@ import { createConnection, BtpMessageContentType } from '../lib'
     console.log(data)
   })
 
-  await new Promise(res => setTimeout(res, 1000))
+  console.time('test')
+  let array = []
 
-  client.message({
-    protocol: 'ilp',
-    contentType: BtpMessageContentType.ApplicationOctetStream,
-    payload: Buffer.from('Hello World!')
-  })
+  for (let i = 0; i < 10000; i++) {
+    array.push(client.request({
+      protocol: 'ilp',
+      contentType: BtpMessageContentType.ApplicationOctetStream,
+      payload: Buffer.from('Hello?')
+    }))
+  }
 
-  client.request({
-    protocol: 'ilp',
-    contentType: BtpMessageContentType.ApplicationOctetStream,
-    payload: Buffer.from('Hello?')
-  }).then((resp) => {
-    console.log(`RESPONSE: ${resp.payload.toString()}`)
-  })
-  client.request({
-    protocol: 'ilp',
-    contentType: BtpMessageContentType.ApplicationOctetStream,
-    payload: Buffer.from('Hello?')
-  }).then((resp) => {
-    console.log(`RESPONSE: ${resp.payload.toString()}`)
-  })
-  client.request({
-    protocol: 'ilp',
-    contentType: BtpMessageContentType.ApplicationOctetStream,
-    payload: Buffer.from('Hello?')
-  }).then((resp) => {
-    console.log(`RESPONSE: ${resp.payload.toString()}`)
-  })
-  client.request({
-    protocol: 'ilp',
-    contentType: BtpMessageContentType.ApplicationOctetStream,
-    payload: Buffer.from('Hello?')
-  }).then((resp) => {
-    console.log(`RESPONSE: ${resp.payload.toString()}`)
-  })
-  //
+  await Promise.all(array)
 
+  console.timeEnd('test')
 })()
