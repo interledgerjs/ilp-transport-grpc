@@ -5,9 +5,9 @@ import { createConnection, BtpMessageContentType } from '../lib'
     headers: {
       authorization: 'Bearer TOKEN'
     },
-    accountId: 'test',
+    accountId: 'matt',
     accountInfo: {
-      relation: 'child',
+      relation: 'parent',
       assetScale: 9,
       assetCode: 'xrp'
     }

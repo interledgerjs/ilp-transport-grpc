@@ -6,9 +6,9 @@ const lib_1 = require("../lib");
         headers: {
             authorization: 'Bearer TOKEN'
         },
-        accountId: 'test',
+        accountId: 'matt',
         accountInfo: {
-            relation: 'child',
+            relation: 'parent',
             assetScale: 9,
             assetCode: 'xrp'
         }

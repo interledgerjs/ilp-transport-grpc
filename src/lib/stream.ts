@@ -465,7 +465,7 @@ export class BtpStream extends EventEmitter {
   }
 }
 
-export async function createConnection (address: string, options: BtpStreamOptions) {
+export async function createConnection (address: string, options: BtpStreamOptions): Promise<BtpStream> {
 
   const grpc = new interledger.Interledger(address,
       credentials.createInsecure())
@@ -477,17 +477,22 @@ export async function createConnection (address: string, options: BtpStreamOptio
   meta.add('accountAssetScale', String(accountInfo.assetScale) as MetadataValue)
 
   // TODO: Fix to be more consistent with async/await
-  return new Promise(function (resolve, reject) {
-    grpc.Authenticate({ id: 'test' }, function (err, feature) {
+  let auth = await new Promise<BtpStream>((resolve, reject) => {
+    grpc.Authenticate({ id: options.accountId }, function (err, feature) {
       if (err) {
-        resolve(reject)
+        reject(err)
       } else {
-        const stream = grpc.Stream(meta)
-        const btpStream = new BtpStream(stream, { accountId: options.accountId, accountInfo: options.accountInfo } , {
-          log: createLogger('btp-socket')
-        })
-        resolve(btpStream)
+        resolve(feature)
       }
     })
+  }).catch(error => {
+    console.log(error)
+  })
+
+  console.log(auth)
+
+  const stream = grpc.Stream(meta)
+  return new BtpStream(stream, { accountId: options.accountId, accountInfo: options.accountInfo } , {
+    log: createLogger('btp-socket')
   })
 }

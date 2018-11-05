@@ -65,12 +65,9 @@ export class BtpServer extends EventEmitter {
     }
 
     const verifyClient = (call: any, callback: any) => {
-      console.log('verify Client')
       this._authenticate(call.request).then((data) => {
         log.debug('Verify Client: Success')
-        setTimeout(() => {
-          callback(null, data)
-        }, 1000)
+        callback(null, data)
       }).catch((e) => {
         log.debug('Verify Client: Fail')
         callback(false, {})
@@ -99,6 +96,6 @@ export class BtpServer extends EventEmitter {
 
 }
 
-async function skipAuthentication (req: http.IncomingMessage): Promise<BtpAuthResponse> {
-  return {}
+async function skipAuthentication (req: any): Promise<BtpAuthResponse> {
+  return req
 }

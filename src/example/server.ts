@@ -2,8 +2,8 @@ import { BtpError, BtpStream, BtpServer, BtpMessage, BtpMessageContentType } fro
 import { createLogger } from 'ilp-module-loader'
 
 const server = new BtpServer({}, {
-  log: createLogger('btp-server'),
-  authenticate: () => Promise.resolve({ id: 'test' })
+  log: createLogger('btp-server')
+  // authenticate: () => Promise.resolve({ id: 'test' })
 })
 server.on('listening', () => {
   console.log('Listening...')
