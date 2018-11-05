@@ -18,14 +18,12 @@ const lib_1 = require("../lib");
     });
     console.time('test');
     let array = [];
-    for (let i = 0; i < 100000; i++) {
-        array.push(client.request({
-            protocol: 'ilp',
-            contentType: lib_1.BtpMessageContentType.ApplicationOctetStream,
-            payload: Buffer.from('Hello?')
-        }));
-    }
-    await Promise.all(array);
+    const resp = await client.request({
+        protocol: 'ilp',
+        contentType: lib_1.BtpMessageContentType.ApplicationOctetStream,
+        payload: Buffer.from('Hello?')
+    });
+    console.log(resp.payload);
     console.timeEnd('test');
 })();
 //# sourceMappingURL=client.js.map

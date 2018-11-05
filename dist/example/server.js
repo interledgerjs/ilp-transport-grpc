@@ -4,7 +4,7 @@ const lib_1 = require("../lib");
 const ilp_module_loader_1 = require("ilp-module-loader");
 const server = new lib_1.BtpServer({}, {
     log: ilp_module_loader_1.createLogger('btp-server'),
-    authenticate: () => Promise.resolve({ account: 'alice' })
+    authenticate: () => Promise.resolve({ id: 'test' })
 });
 server.on('listening', () => {
     console.log('Listening...');

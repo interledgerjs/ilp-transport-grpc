@@ -3,7 +3,7 @@ import { createLogger } from 'ilp-module-loader'
 
 const server = new BtpServer({}, {
   log: createLogger('btp-server'),
-  authenticate: () => Promise.resolve({ account: 'alice' })
+  authenticate: () => Promise.resolve({ id: 'test' })
 })
 server.on('listening', () => {
   console.log('Listening...')

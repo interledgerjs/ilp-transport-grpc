@@ -20,16 +20,22 @@ import { createConnection, BtpMessageContentType } from '../lib'
   console.time('test')
   let array = []
 
-  for (let i = 0; i < 100000; i++) {
-    // @ts-ignore
-    array.push(client.request({
-      protocol: 'ilp',
-      contentType: BtpMessageContentType.ApplicationOctetStream,
-      payload: Buffer.from('Hello?')
-    }))
-  }
+  const resp = await client.request({
+    protocol: 'ilp',
+    contentType: BtpMessageContentType.ApplicationOctetStream,
+    payload: Buffer.from('Hello?')
+  })
 
-  await Promise.all(array)
+  // for (let i = 0; i < 100000; i++) {
+  //   // @ts-ignore
+  //   array.push(client.request({
+  //     protocol: 'ilp',
+  //     contentType: BtpMessageContentType.ApplicationOctetStream,
+  //     payload: Buffer.from('Hello?')
+  //   }))
+  // }
+
+  console.log(resp.payload)
 
   console.timeEnd('test')
 })()

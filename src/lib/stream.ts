@@ -476,11 +476,18 @@ export async function createConnection (address: string, options: BtpStreamOptio
   meta.add('accountAssetCode', accountInfo.assetCode as MetadataValue)
   meta.add('accountAssetScale', String(accountInfo.assetScale) as MetadataValue)
 
-  const stream = grpc.Stream(meta)
-  const btpStream = new BtpStream(stream, { accountId: options.accountId, accountInfo: options.accountInfo } , {
-    log: createLogger('btp-socket')
+  // TODO: Fix to be more consistent with async/await
+  return new Promise(function (resolve, reject) {
+    grpc.Authenticate({ id: 'test' }, function (err, feature) {
+      if (err) {
+        resolve(reject)
+      } else {
+        const stream = grpc.Stream(meta)
+        const btpStream = new BtpStream(stream, { accountId: options.accountId, accountInfo: options.accountInfo } , {
+          log: createLogger('btp-socket')
+        })
+        resolve(btpStream)
+      }
+    })
   })
-  const channel = grpc.getChannel()
-
-  return btpStream
 }

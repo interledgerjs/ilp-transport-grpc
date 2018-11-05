@@ -3,6 +3,7 @@ syntax = "proto3";
 package interledger;
 
 service Interledger {
+    rpc Authenticate (AuthMessage) returns (AuthResponse) {}
     rpc Stream (stream BtpPacket) returns (stream BtpPacket) {}
 }
 
@@ -16,18 +17,11 @@ message BtpPacket {
     string code = 7;
     string message = 8;
 }
-//
-//message BtpPacketData {
-//    repeated BtpSubProtocol protocolData = 1;
-//    string amount = 2;
-//    string code = 3;
-//    string name = 4;
-//    string triggeredAt = 5;
-//    string data = 6;
-//}
-//
-//message BtpSubProtocol {
-//    string protocolName = 1;
-//    int32 contentType = 2;
-//    bytes data = 3;
-//}
+
+message AuthMessage {
+    string id = 1;
+}
+
+message AuthResponse {
+    string id = 1;
+}

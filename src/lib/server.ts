@@ -32,20 +32,17 @@ export interface BtpServerOptions extends ModuleConstructorOptions {
 }
 
 export interface BtpServerServices extends ModuleServices {
-  authenticate?: (req: http.IncomingMessage) => Promise<BtpAuthResponse>
+  authenticate?: (req: http.IncomingMessage) => Promise<any>
 }
 export interface BtpServerListenOptions {
   host: string,
   port: number
 }
-interface ExtendedWebSocket extends WebSocket {
-  accountId?: string
-  accountInfo?: AccountInfo
-}
+
 export class BtpServer extends EventEmitter {
   protected _log: IlpLogger
   protected _grpc: Server
-  protected _authenticate: (req: http.IncomingMessage) => Promise<BtpAuthResponse>
+  protected _authenticate: (req: http.IncomingMessage) => Promise<any>
   constructor (options: BtpServerOptions, services: BtpServerServices) {
     super()
     this._log = services.log
@@ -66,19 +63,23 @@ export class BtpServer extends EventEmitter {
       }
       return false
     }
-    const verifyClient = (info: { origin: string; secure: boolean; req: http.IncomingMessage }, callback: (res: boolean, code?: number, message?: string, headers?: http.OutgoingHttpHeaders) => void): void => {
-      this._authenticate(info.req).then(() => {
+
+    const verifyClient = (call: any, callback: any) => {
+      console.log('verify Client')
+      this._authenticate(call.request).then((data) => {
         log.debug('Verify Client: Success')
-        callback(true)
+        setTimeout(() => {
+          callback(null, data)
+        }, 1000)
       }).catch((e) => {
         log.debug('Verify Client: Fail')
-        callback(false, 401, 'Unauthorized')
+        callback(false, {})
       })
     }
 
     this._grpc = new Server()
 
-    this._grpc.addService(interledger.Interledger.service, { Stream: this._handleNewStream.bind(this) })
+    this._grpc.addService(interledger.Interledger.service, { Stream: this._handleNewStream.bind(this), Authenticate: verifyClient })
     this._grpc.bind(options.host + ':' + options.port, ServerCredentials.createInsecure())
     this._grpc.start()
     this.emit('listening')
