@@ -51,7 +51,7 @@ export class BtpStream extends EventEmitter {
   public _stream: ClientDuplexStream<BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket, BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket>
   private _sentMessages: Map<string, SentMessage>
   private _receivedMessages: Map<string, ReceivedMessage>
-  private _accountId?: string
+  private _accountId: string
   private _accountInfo?: AccountInfo
 
   private _gcIntervalMs: number

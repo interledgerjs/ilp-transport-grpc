@@ -1,7 +1,7 @@
 import { createConnection, BtpMessageContentType } from '../lib'
 
 (async () => {
-  const client = await createConnection('127.0.0.1:5001', {
+  const client = await createConnection('127.0.0.1:5505', {
     headers: {
       authorization: 'Bearer TOKEN'
     },
@@ -14,6 +14,10 @@ import { createConnection, BtpMessageContentType } from '../lib'
   })
 
   client.on('error', (data: any) =>  {
+    console.log(data)
+  })
+
+  client.on('request', (data: any) =>  {
     console.log(data)
   })
 
