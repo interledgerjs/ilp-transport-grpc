@@ -22,7 +22,8 @@ import { SentMessage } from './sentMessage'
 import { BtpError, BtpErrorCode } from './error'
 import { ReceivedMessage, ReceivedMessageState } from './receivedMessage'
 import { EventEmitter } from 'events'
-import { AccountInfo, createLogger, IlpLogger, ModuleConstructorOptions, ModuleServices } from 'ilp-module-loader'
+import { AccountInfo, ModuleConstructorOptions, ModuleServices } from 'ilp-module-loader'
+import { default as createLogger, Logger } from 'ilp-logger'
 
 const log = createLogger('btp-socket')
 
@@ -59,11 +60,12 @@ export interface BtpStreamOptions extends ModuleConstructorOptions {
   gcMessageExpiryMs?: number
 }
 
-export interface BtpStreamServices extends ModuleServices {
+export interface BtpStreamServices {
+  log: Logger
 }
 
 export class BtpStream extends EventEmitter {
-  private _log: IlpLogger
+  private _log: Logger
   public _stream: ClientDuplexStream<BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket, BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket>
   private _sentMessages: Map<string, SentMessage>
   private _receivedMessages: Map<string, ReceivedMessage>
@@ -505,7 +507,6 @@ export async function createConnection (address: string, options: BtpStreamOptio
     console.log(error)
   })
 
-  grpc.on('error',() => console.log('ERROR'))
   const stream = grpc.Stream(meta)
   return new BtpStream(stream, { accountId: options.accountId, accountInfo: options.accountInfo } , {
     log: createLogger('btp-socket')

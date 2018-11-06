@@ -1,5 +1,5 @@
 import { BtpError, BtpStream, BtpServer, BtpMessage, BtpMessageContentType } from '../lib'
-import { createLogger } from 'ilp-module-loader'
+import { default as createLogger } from 'ilp-logger'
 
 const server = new BtpServer({}, {
   log: createLogger('btp-server'),

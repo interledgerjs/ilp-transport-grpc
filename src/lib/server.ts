@@ -6,7 +6,8 @@ import * as fs from 'fs'
 import { EventEmitter } from 'events'
 import { BtpStream, BtpAuthResponse } from './stream'
 import { SIGINT } from 'constants'
-import { ModuleConstructorOptions, ModuleServices, AccountInfo, createLogger, IlpLogger } from 'ilp-module-loader'
+import { ModuleConstructorOptions, ModuleServices, AccountInfo } from 'ilp-module-loader'
+import { default as createLogger, Logger } from 'ilp-logger'
 
 import {
     loadPackageDefinition,
@@ -31,7 +32,8 @@ export interface BtpServerOptions extends ModuleConstructorOptions {
   secure?: boolean
 }
 
-export interface BtpServerServices extends ModuleServices {
+export interface BtpServerServices {
+  log: Logger,
   authenticate?: (req: http.IncomingMessage) => Promise<any>
 }
 export interface BtpServerListenOptions {
@@ -40,7 +42,7 @@ export interface BtpServerListenOptions {
 }
 
 export class BtpServer extends EventEmitter {
-  protected _log: IlpLogger
+  protected _log: Logger
   protected _grpc: Server
   protected _authenticate: (req: http.IncomingMessage) => Promise<any>
   constructor (options: BtpServerOptions, services: BtpServerServices) {
