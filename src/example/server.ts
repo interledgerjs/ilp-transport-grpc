@@ -2,8 +2,8 @@ import { BtpError, BtpStream, BtpServer, BtpMessage, BtpMessageContentType } fro
 import { createLogger } from 'ilp-module-loader'
 
 const server = new BtpServer({}, {
-  log: createLogger('btp-server')
-  // authenticate: () => Promise.resolve({ id: 'test' })
+  log: createLogger('btp-server'),
+  authenticate: () => Promise.resolve({ id: 'test' })
 })
 server.on('listening', () => {
   console.log('Listening...')
@@ -16,7 +16,7 @@ server.on('connection', (stream: BtpStream) => {
   console.log(`CONNECTION: state=${stream.state}`)
 
   stream.on('message', (message: BtpMessage) => {
-    // console.log(`MESSAGE (protocol=${message.protocol}): ${message.payload.toString()}`)
+    console.log(`MESSAGE (protocol=${message.protocol}): ${message.payload.toString()}`)
   })
 
   stream.on('request', (message: BtpMessage, replyCallback: (reply: BtpMessage | BtpError | Promise<BtpMessage | BtpError>) => void) => {
@@ -28,7 +28,7 @@ server.on('connection', (stream: BtpStream) => {
           contentType: BtpMessageContentType.ApplicationOctetStream,
           payload: Buffer.from('Goodbye!')
         })
-      }, 0)
+      }, 100)
     }))
   })
 

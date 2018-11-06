@@ -22,6 +22,7 @@ export type BtpMessagePacket = BtpPacket & BtpMessage
 export type BtpResponsePacket = BtpReplyPacket & BtpMessage
 export type BtpErrorMessagePacket = BtpReplyPacket & BtpErrorMessage
 export type BtpAckPacket = BtpReplyPacket
+export type BtpGenericPacket = BtpMessagePacket & BtpResponsePacket & BtpErrorMessagePacket & BtpAckPacket
 export enum BtpPacketType {
     MESSAGE = 1,
     REQUEST = 2,

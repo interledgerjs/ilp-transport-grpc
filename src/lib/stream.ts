@@ -1,6 +1,22 @@
 import * as WebSocket from 'ws'
 import { SError } from 'verror'
-import { BtpMessage, BtpErrorMessage, BtpMessagePacket, BtpResponsePacket, BtpErrorMessagePacket, BtpPacketType, isBtpMessage, isBtpResponse, isBtpError, BtpAckPacket, isBtpAck, btpMessageToString, btpPacketToString, BtpMessageContentType } from './packet'
+import {
+  BtpMessage,
+  BtpErrorMessage,
+  BtpMessagePacket,
+  BtpResponsePacket,
+  BtpErrorMessagePacket,
+  BtpPacketType,
+  isBtpMessage,
+  isBtpResponse,
+  isBtpError,
+  BtpAckPacket,
+  isBtpAck,
+  btpMessageToString,
+  btpPacketToString,
+  BtpMessageContentType,
+  BtpGenericPacket
+} from './packet'
 import UUID from './uuid'
 import { SentMessage } from './sentMessage'
 import { BtpError, BtpErrorCode } from './error'
@@ -70,19 +86,19 @@ export class BtpStream extends EventEmitter {
     this._gcIntervalMs = options.gcIntervalMs || 1000 // Run GC every second
     this._gcMessageExpiryMs = options.gcMessageExpiryMs || 5 * 60 * 1000 // Clean up messages that have not changed for more than 5 minutes
 
-    this._stream.on('data', (data: any) => {
+    this._stream.on('data', (data: BtpGenericPacket) => {
       this._handleData(data)
     })
 
-    this._stream.on('cancelled', (data: any) => {
-      this.emit('cancelled', data)
+    this._stream.on('cancelled', () => {
+      this.emit('cancelled')
     })
 
     this._stream.on('error', (error: any) => {
       this.emit('error', error)
     })
 
-    // this._gcMessages()
+    this._gcMessages()
   }
 
   public get isAuthorized (): boolean {
@@ -489,8 +505,7 @@ export async function createConnection (address: string, options: BtpStreamOptio
     console.log(error)
   })
 
-  console.log(auth)
-
+  grpc.on('error',() => console.log('ERROR'))
   const stream = grpc.Stream(meta)
   return new BtpStream(stream, { accountId: options.accountId, accountInfo: options.accountInfo } , {
     log: createLogger('btp-socket')
