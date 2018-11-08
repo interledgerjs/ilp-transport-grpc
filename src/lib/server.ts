@@ -90,7 +90,7 @@ export class BtpServer extends EventEmitter {
     const accountInfo = {
       relation: call.metadata.get('accountRelation')[0],
       assetCode: call.metadata.get('accountAssetCode')[0],
-      assetScale: call.metadata.get('accountAssetScale')[0]
+      assetScale: Number(call.metadata.get('accountAssetScale')[0])
     } as AccountInfo
     const btpStream = new BtpStream(call, { accountId, accountInfo },{ log })
     this.emit('connection', btpStream)
