@@ -229,6 +229,7 @@ export class BtpStream extends EventEmitter {
         this._handleAck(packet)
       }
     } catch (e) {
+      log.trace('Handle Data Error', packet)
       this.emit('error', new SError(e, `Unable to deserialize BTP message: ${packet}`))
     }
   }
