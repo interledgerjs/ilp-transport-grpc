@@ -495,17 +495,17 @@ export async function createConnection (address: string, options: BtpStreamOptio
   meta.add('accountAssetScale', String(accountInfo.assetScale) as MetadataValue)
 
   // TODO: Fix to be more consistent with async/await
-  // let auth = await new Promise<BtpStream>((resolve, reject) => {
-  //   grpc.Authenticate({ id: options.accountId }, function (err, feature) {
-  //     if (err) {
-  //       reject(err)
-  //     } else {
-  //       resolve(feature)
-  //     }
-  //   })
-  // }).catch(error => {
-  //   console.log(error)
-  // })
+  let auth = await new Promise<BtpStream>((resolve, reject) => {
+    grpc.Authenticate({ id: options.accountId }, function (err, feature) {
+      if (err) {
+        reject(err)
+      } else {
+        resolve(feature)
+      }
+    })
+  }).catch(error => {
+    console.log(error)
+  })
 
   const stream = grpc.Stream(meta)
   return new BtpStream(stream, { accountId: options.accountId, accountInfo: options.accountInfo } , {
