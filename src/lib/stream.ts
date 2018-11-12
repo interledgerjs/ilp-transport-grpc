@@ -100,7 +100,7 @@ export class BtpStream extends EventEmitter {
       this.emit('error', error)
     })
 
-    this._gcMessages()
+    // this._gcMessages()
   }
 
   public get isAuthorized (): boolean {
