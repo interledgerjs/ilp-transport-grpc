@@ -1,20 +1,21 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const lib_1 = require("../lib");
-const ilp_module_loader_1 = require("ilp-module-loader");
+const ilp_logger_1 = require("ilp-logger");
 const server = new lib_1.BtpServer({}, {
-    log: ilp_module_loader_1.createLogger('btp-server'),
-    authenticate: () => Promise.resolve({ account: 'alice' })
+    log: ilp_logger_1.default('btp-server'),
+    authenticate: () => Promise.resolve({ id: 'test' })
 });
 server.on('listening', () => {
     console.log('Listening...');
 });
-server.on('connection', (socket) => {
-    console.log(`CONNECTION: state=${socket.state}`);
-    socket.on('message', (message) => {
+server.on('connection', (stream) => {
+    const { accountId, accountInfo } = stream;
+    console.log(`CONNECTION: state=${stream.state}`);
+    stream.on('message', (message) => {
         console.log(`MESSAGE (protocol=${message.protocol}): ${message.payload.toString()}`);
     });
-    socket.on('request', (message, replyCallback) => {
+    stream.on('request', (message, replyCallback) => {
         console.log(`REQUEST (protocol=${message.protocol}): ${message.payload.toString()}`);
         replyCallback(new Promise((respond) => {
             setTimeout(() => {
@@ -23,11 +24,14 @@ server.on('connection', (socket) => {
                     contentType: lib_1.BtpMessageContentType.ApplicationOctetStream,
                     payload: Buffer.from('Goodbye!')
                 });
-            }, 1000);
+            }, 100);
         }));
     });
+    stream.on('error', (error) => console.log(error));
+    stream.on('cancelled', (error) => console.log('cancelled', error));
 });
 server.listen({
-    path: '/tmp/btp-server.sock'
+    host: '0.0.0.0',
+    port: 5001
 });
 //# sourceMappingURL=server.js.map

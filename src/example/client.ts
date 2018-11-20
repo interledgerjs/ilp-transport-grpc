@@ -1,23 +1,34 @@
-import { createConnection, BtpMessageContentType } from '../lib'
+import {createConnection, BtpMessageContentType, BtpPacketType, BtpErrorCode, BtpErrorMessagePacket} from '../lib'
+import UUID from '../lib/uuid'
 
 (async () => {
-  const client = await createConnection('ws+unix:///tmp/btp-server.sock', {
+  const client = await createConnection('127.0.0.1:5001', {
     headers: {
       authorization: 'Bearer TOKEN'
+    },
+    accountId: 'matt',
+    accountInfo: {
+      relation: 'child',
+      assetScale: 9,
+      assetCode: 'xrp'
     }
   })
-  client.message({
-    protocol: 'ilp',
-    contentType: BtpMessageContentType.ApplicationOctetStream,
-    payload: Buffer.from('Hello World!')
+
+  client.on('error', (data: any) =>  {
+    console.log(data)
   })
 
-  const resp = await client.request({
-    protocol: 'ilp',
-    contentType: BtpMessageContentType.ApplicationOctetStream,
-    payload: Buffer.from('Hello?')
+  client.on('request', (data: any) =>  {
+    console.log(data)
   })
 
-  console.log(`RESPONSE: ${resp.payload.toString()}`)
+  const errorPacket = {
+    id: new UUID().toString(),
+    correlationId: new UUID().toString(),
+    type: BtpPacketType.ERROR,
+    code: BtpErrorCode.UnknownCorrelationId,
+    message: `No request found with id: ${new UUID().toString()}`
+  } as BtpErrorMessagePacket
 
+  // const resp = await client._send(errorPacket, () => null)
 })()

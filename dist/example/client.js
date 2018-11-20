@@ -1,22 +1,31 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const lib_1 = require("../lib");
+const uuid_1 = require("../lib/uuid");
 (async () => {
-    const client = await lib_1.createConnection('ws+unix:///tmp/btp-server.sock', {
+    const client = await lib_1.createConnection('127.0.0.1:5001', {
         headers: {
             authorization: 'Bearer TOKEN'
+        },
+        accountId: 'matt',
+        accountInfo: {
+            relation: 'child',
+            assetScale: 9,
+            assetCode: 'xrp'
         }
     });
-    client.message({
-        protocol: 'ilp',
-        contentType: lib_1.BtpMessageContentType.ApplicationOctetStream,
-        payload: Buffer.from('Hello World!')
+    client.on('error', (data) => {
+        console.log(data);
     });
-    const resp = await client.request({
-        protocol: 'ilp',
-        contentType: lib_1.BtpMessageContentType.ApplicationOctetStream,
-        payload: Buffer.from('Hello?')
+    client.on('request', (data) => {
+        console.log(data);
     });
-    console.log(`RESPONSE: ${resp.payload.toString()}`);
+    const errorPacket = {
+        id: new uuid_1.default().toString(),
+        correlationId: new uuid_1.default().toString(),
+        type: lib_1.BtpPacketType.ERROR,
+        code: lib_1.BtpErrorCode.UnknownCorrelationId,
+        message: `No request found with id: ${new uuid_1.default().toString()}`
+    };
 })();
 //# sourceMappingURL=client.js.map

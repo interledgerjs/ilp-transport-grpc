@@ -4,7 +4,7 @@
     // "target": "es6", // Compatible with modern browsers
     "module": "commonjs",
     "declaration": true,
-    "noImplicitAny": true,
+    "noImplicitAny": false,
     "removeComments": true,
     "moduleResolution": "node",
     "sourceMap": true,
@@ -13,11 +13,5 @@
     "suppressImplicitAnyIndexErrors": true,
     "outDir": "dist",
     "rootDir": "src"
-  },
-  "include": [
-    "src/**/*.ts"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  }
 }

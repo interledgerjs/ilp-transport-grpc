@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package interledger;
+
+service Interledger {
+    rpc Authenticate (AuthMessage) returns (AuthResponse) {}
+    rpc Stream (stream BtpPacket) returns (stream BtpPacket) {}
+}
+
+message BtpPacket {
+    int32 type = 1;
+    string id = 2;
+    string correlationId = 3;
+    string protocol = 4;
+    int32 contentType = 5;
+    bytes payload = 6;
+    string code = 7;
+    string message = 8;
+}
+
+message AuthMessage {
+    string id = 1;
+}
+
+message AuthResponse {
+    string id = 1;
+}

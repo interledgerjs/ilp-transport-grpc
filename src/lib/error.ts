@@ -21,6 +21,8 @@ export namespace BtpErrorCode {
         return 'DuplicateIdError'
       case BtpErrorCode.UnknownProtocolError:
         return 'UnknownProtocolError'
+      case BtpErrorCode.UnknownCorrelationId:
+        return 'UnknownCorrelationId'
     }
     throw new Error('Unknown BtpErrorCode')
   }

@@ -1,44 +1,83 @@
 import * as WebSocket from 'ws'
 import { SError } from 'verror'
-import { BtpMessage, BtpErrorMessage, BtpMessagePacket, BtpResponsePacket, BtpErrorMessagePacket, BtpPacketType, deserializePacket, isBtpMessage, isBtpResponse, isBtpError, BtpAckPacket, isBtpAck, serializePacket, btpMessageToString, btpPacketToString, BtpMessageContentType } from './packet'
+import {
+  BtpMessage,
+  BtpErrorMessage,
+  BtpMessagePacket,
+  BtpResponsePacket,
+  BtpErrorMessagePacket,
+  BtpPacketType,
+  isBtpMessage,
+  isBtpResponse,
+  isBtpError,
+  BtpAckPacket,
+  isBtpAck,
+  btpMessageToString,
+  btpPacketToString,
+  BtpMessageContentType,
+  BtpGenericPacket
+} from './packet'
 import UUID from './uuid'
 import { SentMessage } from './sentMessage'
 import { BtpError, BtpErrorCode } from './error'
 import { ReceivedMessage, ReceivedMessageState } from './receivedMessage'
 import { EventEmitter } from 'events'
-import { AccountInfo, createLogger, IlpLogger, ModuleConstructorOptions, ModuleServices } from 'ilp-module-loader'
+import { AccountInfo, ModuleConstructorOptions, ModuleServices } from 'ilp-module-loader'
+import { default as createLogger, Logger } from 'ilp-logger'
 
 const log = createLogger('btp-socket')
+
+import {
+    ClientDuplexStream,
+    loadPackageDefinition,
+    credentials,
+    Metadata,
+    MetadataValue, ServerDuplexStream
+} from 'grpc'
+
+const PROTO_PATH = __dirname + '/../../src/lib/btp.proto'
+const protoLoader = require('@grpc/proto-loader')
+const packageDefinition = protoLoader.loadSync(
+    PROTO_PATH,
+  {keepCase: true,
+    longs: String,
+    enums: String,
+    defaults: true,
+    oneofs: true
+  })
+const protoDescriptor = loadPackageDefinition(packageDefinition)
+export const interledger = protoDescriptor.interledger
 
 export interface BtpAuthResponse {
   account?: string
   info?: AccountInfo
 }
 
-export interface BtpSocketOptions extends ModuleConstructorOptions {
-  accountId?: string
-  accountInfo?: AccountInfo
+export interface BtpStreamOptions extends ModuleConstructorOptions {
+  accountId: string
+  accountInfo: AccountInfo
   gcIntervalMs?: number
   gcMessageExpiryMs?: number
 }
 
-export interface BtpSocketServices extends ModuleServices {
+export interface BtpStreamServices {
+  log: Logger
 }
 
-export class BtpSocket extends EventEmitter {
-  private _log: IlpLogger
-  private _socket: WebSocket
+export class BtpStream extends EventEmitter {
+  private _log: Logger
+  public _stream: ClientDuplexStream<BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket, BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket>
   private _sentMessages: Map<string, SentMessage>
   private _receivedMessages: Map<string, ReceivedMessage>
-  private _accountId?: string
+  private _accountId: string
   private _accountInfo?: AccountInfo
 
   private _gcIntervalMs: number
   private _gcMessageExpiryMs: number
 
-  constructor (webSocket: WebSocket, options: BtpSocketOptions, services: BtpSocketServices) {
+  constructor (stream: ClientDuplexStream<BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket,BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket>, options: BtpStreamOptions, services: BtpStreamServices) {
     super()
-    this._socket = webSocket
+    this._stream = stream
     this._sentMessages = new Map()
     this._receivedMessages = new Map()
 
@@ -49,24 +88,19 @@ export class BtpSocket extends EventEmitter {
     this._gcIntervalMs = options.gcIntervalMs || 1000 // Run GC every second
     this._gcMessageExpiryMs = options.gcMessageExpiryMs || 5 * 60 * 1000 // Clean up messages that have not changed for more than 5 minutes
 
-    this._socket.on('message', (data: Buffer) => {
+    this._stream.on('data', (data: BtpGenericPacket) => {
       this._handleData(data)
     })
 
-    this._socket.on('error', (code: number, reason: string) => {
-      this.emit('error', new SError(`EWSERROR ${code} ${reason}`))
+    this._stream.on('cancelled', () => {
+      this.emit('cancelled')
     })
 
-    this._socket.on('close', (code: number, reason: string) => {
-      this.emit('close', code, reason)
+    this._stream.on('error', (error: any) => {
+      this.emit('error', error)
     })
 
-    // TODO - Should we do more here?
-    this._socket.on('ping', (data: Buffer) => {
-      this._socket.pong(data)
-    })
-
-    this._gcMessages()
+    // this._gcMessages()
   }
 
   public get isAuthorized (): boolean {
@@ -103,7 +137,7 @@ export class BtpSocket extends EventEmitter {
   }
 
   public get state () {
-    return this._socket.readyState
+    return true // this._stream.status()
   }
 
   /**
@@ -115,7 +149,7 @@ export class BtpSocket extends EventEmitter {
     return new Promise<void>((ackCallback, errorCallback) => {
       const id = new UUID()
       const type = BtpPacketType.MESSAGE
-      const packet = Object.assign({ id, type }, message)
+      const packet = Object.assign({ id: id.toString(), type }, message)
 
       const sentMessage = new SentMessage({ packet })
         .on('ack', () => { ackCallback() })
@@ -129,7 +163,7 @@ export class BtpSocket extends EventEmitter {
         .on('timeout', () => {
           this._send(packet, sentMessage.sent.bind(sentMessage))
         })
-      this._sentMessages.set(packet.id.toString(), sentMessage)
+      this._sentMessages.set(packet.id, sentMessage)
       this._send(packet, sentMessage.sent.bind(sentMessage))
     })
   }
@@ -149,7 +183,7 @@ export class BtpSocket extends EventEmitter {
     return new Promise<BtpMessage>((responseCallback, errorCallback) => {
       const id = new UUID()
       const type = BtpPacketType.REQUEST
-      const packet = Object.assign({ id, type }, message)
+      const packet = Object.assign({ id: id.toString(), type }, message)
       let acknowledged = false
 
       const sentRequest = new SentMessage({ packet })
@@ -179,10 +213,8 @@ export class BtpSocket extends EventEmitter {
     })
   }
 
-  private _handleData (data: Buffer): void {
+  private _handleData (packet: any): void {
     try {
-      const packet = deserializePacket(data)
-      this._log.debug(`receive: ${btpPacketToString(packet)}`)
       if (isBtpMessage(packet)) {
         if (packet.type === BtpPacketType.MESSAGE) {
           this._handleMessage(packet)
@@ -197,7 +229,8 @@ export class BtpSocket extends EventEmitter {
         this._handleAck(packet)
       }
     } catch (e) {
-      this.emit('error', new SError(e, `Unable to deserialize BTP message: ${data.toString('hex')}`))
+      log.trace('Handle Data Error', packet)
+      this.emit('error', new SError(e, `Unable to deserialize BTP message: ${packet}`))
     }
   }
 
@@ -210,14 +243,14 @@ export class BtpSocket extends EventEmitter {
       // TODO Deal with possible DoS attack where same message is received multiple time using same ID
       if (Number(prevReceivedMessage.state) === Number(ReceivedMessageState.ACK_SENT)) {
         this._send({
-          id: new UUID(),
+          id: new UUID().toString(),
           correlationId: packet.id,
           type: BtpPacketType.ACK
         } as BtpAckPacket,
         prevReceivedMessage.acknowledged.bind(prevReceivedMessage))
       } else if (Number(prevReceivedMessage.state) === Number(ReceivedMessageState.ERROR_SENT)) {
         this._send(
-          Object.assign(prevReceivedMessage.error, { id: new UUID() }),
+          Object.assign(prevReceivedMessage.error, { id: new UUID().toString() }),
           prevReceivedMessage.errorSent.bind(prevReceivedMessage))
       } else {
         // TODO We are getting the same repeated message but not responding.
@@ -227,7 +260,7 @@ export class BtpSocket extends EventEmitter {
       const receivedMessage = new ReceivedMessage({ packet })
       this._receivedMessages.set(packet.id.toString(), receivedMessage)
       const ackPacket = {
-        id: new UUID(),
+        id: new UUID().toString(),
         correlationId: packet.id,
         type: BtpPacketType.ACK
       } as BtpAckPacket
@@ -236,7 +269,7 @@ export class BtpSocket extends EventEmitter {
         receivedMessage.acknowledged.bind(receivedMessage))
       this.emit('message', packet, (error: BtpError) => {
         const errorPacket = {
-          id: new UUID(),
+          id: new UUID().toString(),
           correlationId: packet.id,
           type: BtpPacketType.ERROR,
           code: BtpErrorCode.NotAcceptedError, // TODO Map BtpError to correct code
@@ -257,18 +290,18 @@ export class BtpSocket extends EventEmitter {
       // TODO Deal with possible DoS attack where same message is received multiple time using same ID
       if (Number(prevReceivedRequest.state) === Number(ReceivedMessageState.ACK_SENT)) {
         this._send({
-          id: new UUID(),
+          id: new UUID().toString(),
           correlationId: packet.id,
           type: BtpPacketType.ACK
         } as BtpAckPacket,
         prevReceivedRequest.acknowledged.bind(prevReceivedRequest))
       } else if (Number(prevReceivedRequest.state) === Number(ReceivedMessageState.RESPONSE_SENT)) {
-        const responsePacket = Object.assign(prevReceivedRequest.response, { id: new UUID() })
+        const responsePacket = Object.assign(prevReceivedRequest.response, { id: new UUID().toString() })
         this._send(
           responsePacket,
           prevReceivedRequest.responseSent.bind(prevReceivedRequest))
       } else if (Number(prevReceivedRequest.state) === Number(ReceivedMessageState.ERROR_SENT)) {
-        const errorPacket = Object.assign(prevReceivedRequest.error, { id: new UUID() })
+        const errorPacket = Object.assign(prevReceivedRequest.error, { id: new UUID().toString() })
         this._send(
           errorPacket,
           prevReceivedRequest.errorSent.bind(prevReceivedRequest))
@@ -280,7 +313,7 @@ export class BtpSocket extends EventEmitter {
       const receivedRequest = new ReceivedMessage({ packet })
       this._receivedMessages.set(packet.id.toString(), receivedRequest)
       const ackPacket = {
-        id: new UUID(),
+        id: new UUID().toString(),
         correlationId: packet.id,
         type: BtpPacketType.ACK
       } as BtpAckPacket
@@ -293,7 +326,7 @@ export class BtpSocket extends EventEmitter {
             this._reply(receivedRequest, asyncReply)
           }).catch(error => {
             const errorPacket = Object.assign({
-              id: new UUID(),
+              id: new UUID().toString(),
               correlationId: packet.id,
               type: BtpPacketType.ERROR,
               code: BtpErrorCode.NotAcceptedError
@@ -309,14 +342,14 @@ export class BtpSocket extends EventEmitter {
   private _reply (receivedRequest: ReceivedMessage, reply: BtpErrorMessage | BtpMessage) {
     if (reply instanceof BtpError) {
       const errorPacket = Object.assign({
-        id: new UUID(),
+        id: new UUID().toString(),
         correlationId: receivedRequest.packet.id,
         type: BtpPacketType.ERROR
       }, reply) as BtpErrorMessagePacket
       this._send(errorPacket, receivedRequest.errorSent.bind(receivedRequest, errorPacket))
     } else {
       const responsePacket = Object.assign({
-        id: new UUID(),
+        id: new UUID().toString(),
         correlationId: receivedRequest.packet.id,
         type: BtpPacketType.RESPONSE
       }, reply) as BtpResponsePacket
@@ -333,13 +366,13 @@ export class BtpSocket extends EventEmitter {
       // TODO Deal with possible DoS attack where same message is received multiple times using same ID
       if (Number(prevReceivedResponse.state) === Number(ReceivedMessageState.ACK_SENT)) {
         this._send({
-          id: new UUID(),
+          id: new UUID().toString(),
           correlationId: packet.id,
           type: BtpPacketType.ACK
         } as BtpAckPacket,
         prevReceivedResponse.acknowledged.bind(prevReceivedResponse))
       } else if (Number(prevReceivedResponse.state) === Number(ReceivedMessageState.ERROR_SENT)) {
-        const errorPacket = Object.assign(prevReceivedResponse.error, { id: new UUID() })
+        const errorPacket = Object.assign(prevReceivedResponse.error, { id: new UUID().toString() })
         this._send(
           errorPacket,
           prevReceivedResponse.errorSent.bind(prevReceivedResponse, errorPacket))
@@ -353,7 +386,7 @@ export class BtpSocket extends EventEmitter {
       const originalRequest = this._sentMessages.get(packet.correlationId.toString())
       if (!originalRequest) {
         const errorPacket = {
-          id: new UUID(),
+          id: new UUID().toString(),
           correlationId: packet.id,
           type: BtpPacketType.ERROR,
           code: BtpErrorCode.UnknownCorrelationId,
@@ -364,7 +397,7 @@ export class BtpSocket extends EventEmitter {
           receivedResponse.errorSent.bind(receivedResponse))
       } else {
         this._send({
-          id: new UUID(),
+          id: new UUID().toString(),
           correlationId: packet.id,
           type: BtpPacketType.ACK
         } as BtpAckPacket,
@@ -383,13 +416,13 @@ export class BtpSocket extends EventEmitter {
       // TODO Deal with possible DoS attack where same message is received multiple times using same ID
       if (Number(prevReceivedError.state) === Number(ReceivedMessageState.ACK_SENT)) {
         this._send({
-          id: new UUID(),
+          id: new UUID().toString(),
           correlationId: packet.id,
           type: BtpPacketType.ACK
         } as BtpAckPacket,
         prevReceivedError.acknowledged.bind(prevReceivedError))
       } else if (Number(prevReceivedError.state) === Number(ReceivedMessageState.ERROR_SENT)) {
-        const errorPacket = Object.assign(prevReceivedError.error, { id: new UUID() })
+        const errorPacket = Object.assign(prevReceivedError.error, { id: new UUID().toString() })
         this._send(
           errorPacket,
           prevReceivedError.errorSent.bind(prevReceivedError, errorPacket))
@@ -403,7 +436,7 @@ export class BtpSocket extends EventEmitter {
       const originalRequest = this._sentMessages.get(packet.correlationId.toString())
       if (!originalRequest) {
         const errorPacket = {
-          id: new UUID(),
+          id: new UUID().toString(),
           correlationId: packet.id,
           type: BtpPacketType.ERROR,
           code: BtpErrorCode.UnknownCorrelationId,
@@ -414,7 +447,7 @@ export class BtpSocket extends EventEmitter {
           receivedError.errorSent.bind(receivedError))
       } else {
         this._send({
-          id: new UUID(),
+          id: new UUID().toString(),
           correlationId: packet.id,
           type: BtpPacketType.ACK
         } as BtpAckPacket,
@@ -434,14 +467,7 @@ export class BtpSocket extends EventEmitter {
   }
   private _send (packet: BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket , cb: () => void) {
     this._log.debug(`send: ${btpPacketToString(packet)}`)
-    this._socket.send(serializePacket(packet), (error?: Error) => {
-      if (error) {
-        throw error
-      }
-      if (cb) {
-        cb()
-      }
-    })
+    this._stream.write(packet)
   }
   private _gcMessages () {
     this._sentMessages.forEach((message, messageId) => {
@@ -458,24 +484,32 @@ export class BtpSocket extends EventEmitter {
   }
 }
 
-export async function createConnection (address: string, options: BtpSocketOptions & WebSocket.ClientOptions) {
+export async function createConnection (address: string, options: BtpStreamOptions): Promise<BtpStream> {
 
-  const optionsWithDefaults = Object.assign({
-    setHost: false
-  }, options)
-  const socket = new WebSocket(address, ['btp3'], optionsWithDefaults)
-  const btpSocket = new BtpSocket(socket, {}, {
+  const grpc = new interledger.Interledger(address,
+      credentials.createInsecure())
+  let meta = new Metadata()
+  const accountInfo = options.accountInfo
+  meta.add('accountId', options.accountId as MetadataValue || 'test')
+  meta.add('accountRelation', accountInfo.relation as MetadataValue)
+  meta.add('accountAssetCode', accountInfo.assetCode as MetadataValue)
+  meta.add('accountAssetScale', String(accountInfo.assetScale) as MetadataValue)
+
+  // TODO: Fix to be more consistent with async/await
+  let auth = await new Promise<BtpStream>((resolve, reject) => {
+    grpc.Authenticate({ id: options.accountId }, function (err, feature) {
+      if (err) {
+        reject(err)
+      } else {
+        resolve(feature)
+      }
+    })
+  }).catch(error => {
+    console.log(error)
+  })
+
+  const stream = grpc.Stream(meta)
+  return new BtpStream(stream, { accountId: options.accountId, accountInfo: options.accountInfo } , {
     log: createLogger('btp-socket')
   })
-  return new Promise<BtpSocket>((resolve, error) => {
-    const timeout = setTimeout(() => {
-      socket.close()
-      error()
-    }, 5000)
-    socket.once('open', () => {
-      clearTimeout(timeout)
-      resolve(btpSocket)
-    })
-  })
-
 }
