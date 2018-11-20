@@ -1,10 +1,6 @@
 import * as http from 'http'
-import * as https from 'https'
-import * as net from 'net'
-import * as fs from 'fs'
 import { EventEmitter } from 'events'
 import { GrpcTransport, BtpAuthResponse } from './stream'
-import { SIGINT } from 'constants'
 import { default as createLogger, Logger } from 'ilp-logger'
 import { AccountInfo } from './account'
 import {
@@ -17,11 +13,11 @@ export interface GrpcTransportServerOptions {
   secure?: boolean
 }
 
-export interface BtpServerServices {
-  log: Logger,
+export interface GrpcTransportServerServices {
+  log?: Logger,
   authenticate?: (req: http.IncomingMessage) => Promise<any>
 }
-export interface BtpServerListenOptions {
+export interface GrpcTransportServerListenOptions {
   host: string,
   port: number
 }
@@ -30,12 +26,12 @@ export class GrpcTransportServer extends EventEmitter {
   protected _log: Logger
   protected _grpc: Server
   protected _authenticate: (req: http.IncomingMessage) => Promise<any>
-  constructor (options: GrpcTransportServerOptions, services: BtpServerServices) {
+  constructor (options: GrpcTransportServerOptions, services: GrpcTransportServerServices) {
     super()
-    this._log = services.log
+    this._log = services.log || createLogger('grpc-server')
     this._authenticate = services.authenticate || skipAuthentication
   }
-  public async listen (options: BtpServerListenOptions): Promise<void> {
+  public async listen (options: GrpcTransportServerListenOptions): Promise<void> {
 
     if (!options.host && !options.port) {
       throw new Error(`Both host and port must be provided`)
