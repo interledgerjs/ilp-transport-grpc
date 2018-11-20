@@ -1,6 +1,6 @@
-import { BtpMessagePacket, BtpResponsePacket, BtpErrorMessagePacket, BtpPacketType } from './packet'
+import { MessageFrame, ResponseFrame, ErrorFrame, FrameType } from './packet'
 import { EventEmitter } from 'events'
-import { BtpError, btpErrorFromMessage, BtpErrorCode } from './error'
+import { transportErrorFromMessage } from './error'
 
 export enum ReceivedMessageState {
   RECEIVED = 0,
@@ -10,7 +10,7 @@ export enum ReceivedMessageState {
 }
 
 export interface ReceivedMessageOptions {
-  packet: BtpMessagePacket | BtpErrorMessagePacket
+  packet: MessageFrame | ErrorFrame
 }
 
 /**
@@ -19,9 +19,9 @@ export interface ReceivedMessageOptions {
 export class ReceivedMessage extends EventEmitter {
   private _state: ReceivedMessageState
   private _timestamps: Map<ReceivedMessageState, number> = new Map()
-  private _packet: BtpMessagePacket | BtpErrorMessagePacket
-  private _response?: BtpResponsePacket
-  private _error?: BtpErrorMessagePacket
+  private _packet: MessageFrame | ErrorFrame
+  private _response?: ResponseFrame
+  private _error?: ErrorFrame
 
   constructor (options: ReceivedMessageOptions) {
     super()
@@ -33,15 +33,15 @@ export class ReceivedMessage extends EventEmitter {
     return this._state
   }
 
-  public get packet (): BtpMessagePacket | BtpErrorMessagePacket {
+  public get packet (): MessageFrame | ErrorFrame {
     return this._packet
   }
 
-  public get response (): BtpResponsePacket | undefined {
+  public get response (): ResponseFrame | undefined {
     return this._response
   }
 
-  public get error (): BtpErrorMessagePacket | undefined {
+  public get error (): ErrorFrame | undefined {
     return this._error
   }
 
@@ -50,7 +50,7 @@ export class ReceivedMessage extends EventEmitter {
   }
 
   public get isComplete (): boolean {
-    return (this._packet.type === BtpPacketType.REQUEST &&
+    return (this._packet.type === FrameType.REQUEST &&
       Number(this._state) >= ReceivedMessageState.RESPONSE_SENT) ||
     Number(this._state) >= ReceivedMessageState.ACK_SENT
   }
@@ -60,16 +60,16 @@ export class ReceivedMessage extends EventEmitter {
     this.emit('ack')
   }
 
-  public responseSent (response: BtpResponsePacket): void {
+  public responseSent (response: ResponseFrame): void {
     this._setState(ReceivedMessageState.RESPONSE_SENT)
     this._response = response
     this.emit('response', response)
   }
 
-  public errorSent (error: BtpErrorMessagePacket): void {
+  public errorSent (error: ErrorFrame): void {
     this._setState(ReceivedMessageState.ERROR_SENT)
     this._error = error
-    this.emit('error', btpErrorFromMessage(error))
+    this.emit('error', transportErrorFromMessage(error))
   }
 
   private _setState (state: ReceivedMessageState) {

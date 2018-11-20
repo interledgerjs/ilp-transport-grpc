@@ -1,34 +1,19 @@
-import * as WebSocket from 'ws'
 import * as http from 'http'
 import * as https from 'https'
 import * as net from 'net'
 import * as fs from 'fs'
 import { EventEmitter } from 'events'
-import { BtpStream, BtpAuthResponse } from './stream'
+import { GrpcTransport, BtpAuthResponse } from './stream'
 import { SIGINT } from 'constants'
-import { ModuleConstructorOptions, ModuleServices, AccountInfo } from 'ilp-module-loader'
 import { default as createLogger, Logger } from 'ilp-logger'
-
+import { AccountInfo } from './account'
 import {
-    loadPackageDefinition,
-    Server,
-    ServerCredentials
+  Server,
+  ServerCredentials
 } from 'grpc'
+import { TransportService, DuplexStream } from './grpc'
 
-const PROTO_PATH = __dirname + '/../../src/lib/btp.proto'
-const protoLoader = require('@grpc/proto-loader')
-const packageDefinition = protoLoader.loadSync(
-    PROTO_PATH,
-  {keepCase: true,
-    longs: String,
-    enums: String,
-    defaults: true,
-    oneofs: true
-  })
-const protoDescriptor = loadPackageDefinition(packageDefinition)
-export const interledger = protoDescriptor.interledger
-
-export interface BtpServerOptions extends ModuleConstructorOptions {
+export interface GrpcTransportServerOptions {
   secure?: boolean
 }
 
@@ -41,11 +26,11 @@ export interface BtpServerListenOptions {
   port: number
 }
 
-export class BtpServer extends EventEmitter {
+export class GrpcTransportServer extends EventEmitter {
   protected _log: Logger
   protected _grpc: Server
   protected _authenticate: (req: http.IncomingMessage) => Promise<any>
-  constructor (options: BtpServerOptions, services: BtpServerServices) {
+  constructor (options: GrpcTransportServerOptions, services: BtpServerServices) {
     super()
     this._log = services.log
     this._authenticate = services.authenticate || skipAuthentication
@@ -56,15 +41,6 @@ export class BtpServer extends EventEmitter {
       throw new Error(`Both host and port must be provided`)
     }
     const log = this._log
-    const authenticate = this._authenticate
-
-    const handleProtocols = (protocols: string[], req: http.IncomingMessage): string | false => {
-      log.debug('HandleProtocols: %s', protocols.join(','))
-      if (protocols.indexOf('btp3') > -1) {
-        return 'btp3'
-      }
-      return false
-    }
 
     const verifyClient = (call: any, callback: any) => {
       this._authenticate(call.request).then((data) => {
@@ -77,23 +53,21 @@ export class BtpServer extends EventEmitter {
     }
 
     this._grpc = new Server()
-
-    this._grpc.addService(interledger.Interledger.service, { Stream: this._handleNewStream.bind(this), Authenticate: verifyClient })
+    this._grpc.addService(TransportService.service, { MessageStream: this._handleNewStream.bind(this), Authenticate: verifyClient })
     this._grpc.bind(options.host + ':' + options.port, ServerCredentials.createInsecure())
     this._grpc.start()
     this.emit('listening')
   }
 
-  _handleNewStream (call: any) {
-    const accountId = call.metadata.get('accountId')[0]
+  _handleNewStream (stream: DuplexStream) {
+    const accountId = String(stream.metadata.get('accountId')[0].toString())
     const log = createLogger('btp-server:' + accountId)
     const accountInfo = {
-      relation: call.metadata.get('accountRelation')[0],
-      assetCode: call.metadata.get('accountAssetCode')[0],
-      assetScale: Number(call.metadata.get('accountAssetScale')[0])
+      relation: stream.metadata.get('accountRelation')[0],
+      assetCode: stream.metadata.get('accountAssetCode')[0],
+      assetScale: Number(stream.metadata.get('accountAssetScale')[0])
     } as AccountInfo
-    const btpStream = new BtpStream(call, { accountId, accountInfo },{ log })
-    this.emit('connection', btpStream)
+    this.emit('connection', new GrpcTransport(stream, { accountId, accountInfo },{ log }))
   }
 
 }

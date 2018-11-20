@@ -1,72 +1,51 @@
-import * as WebSocket from 'ws'
 import { SError } from 'verror'
 import {
-  BtpMessage,
-  BtpErrorMessage,
-  BtpMessagePacket,
-  BtpResponsePacket,
-  BtpErrorMessagePacket,
-  BtpPacketType,
-  isBtpMessage,
-  isBtpResponse,
-  isBtpError,
-  BtpAckPacket,
-  isBtpAck,
-  btpMessageToString,
-  btpPacketToString,
-  BtpMessageContentType,
-  BtpGenericPacket
+  MessagePayload,
+  ErrorPayload,
+  MessageFrame,
+  ResponseFrame,
+  ErrorFrame,
+  FrameType,
+  isMessageFrame,
+  isResponseFrame,
+  isErrorFrame,
+  AckFrame,
+  isAckFrame,
+  messageFrameToString,
+  frameToString,
+  FrameContentType,
+  Frame
 } from './packet'
 import UUID from './uuid'
 import { SentMessage } from './sentMessage'
-import { BtpError, BtpErrorCode } from './error'
+import { TransportError, TransportErrorCode } from './error'
 import { ReceivedMessage, ReceivedMessageState } from './receivedMessage'
 import { EventEmitter } from 'events'
-import { AccountInfo, ModuleConstructorOptions, ModuleServices } from 'ilp-module-loader'
 import { default as createLogger, Logger } from 'ilp-logger'
-
-const log = createLogger('btp-socket')
-
-import {
-    ClientDuplexStream,
-    loadPackageDefinition,
-    credentials,
-    Metadata,
-    MetadataValue, ServerDuplexStream
-} from 'grpc'
-
-const PROTO_PATH = __dirname + '/../../src/lib/btp.proto'
-const protoLoader = require('@grpc/proto-loader')
-const packageDefinition = protoLoader.loadSync(
-    PROTO_PATH,
-  {keepCase: true,
-    longs: String,
-    enums: String,
-    defaults: true,
-    oneofs: true
-  })
-const protoDescriptor = loadPackageDefinition(packageDefinition)
-export const interledger = protoDescriptor.interledger
+import { credentials, Metadata, MetadataValue } from 'grpc'
+import { AccountInfo } from './account'
+import { DuplexStream, TransportService, AuthResponse } from './grpc'
+const log = createLogger('grpc-transport')
 
 export interface BtpAuthResponse {
   account?: string
   info?: AccountInfo
 }
 
-export interface BtpStreamOptions extends ModuleConstructorOptions {
+export interface GrpcTransportOptions {
   accountId: string
   accountInfo: AccountInfo
   gcIntervalMs?: number
   gcMessageExpiryMs?: number
 }
 
-export interface BtpStreamServices {
+export interface GrpcTransportServices {
   log: Logger
 }
 
-export class BtpStream extends EventEmitter {
+export class GrpcTransport extends EventEmitter {
   private _log: Logger
-  public _stream: ClientDuplexStream<BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket, BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket>
+  public _stream: DuplexStream
   private _sentMessages: Map<string, SentMessage>
   private _receivedMessages: Map<string, ReceivedMessage>
   private _accountId: string
@@ -75,7 +54,7 @@ export class BtpStream extends EventEmitter {
   private _gcIntervalMs: number
   private _gcMessageExpiryMs: number
 
-  constructor (stream: ClientDuplexStream<BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket,BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket>, options: BtpStreamOptions, services: BtpStreamServices) {
+  constructor (stream: DuplexStream, options: GrpcTransportOptions, services: GrpcTransportServices) {
     super()
     this._stream = stream
     this._sentMessages = new Map()
@@ -88,7 +67,7 @@ export class BtpStream extends EventEmitter {
     this._gcIntervalMs = options.gcIntervalMs || 1000 // Run GC every second
     this._gcMessageExpiryMs = options.gcMessageExpiryMs || 5 * 60 * 1000 // Clean up messages that have not changed for more than 5 minutes
 
-    this._stream.on('data', (data: BtpGenericPacket) => {
+    this._stream.on('data', (data: Frame) => {
       this._handleData(data)
     })
 
@@ -119,7 +98,7 @@ export class BtpStream extends EventEmitter {
     const payload = Buffer.from(JSON.stringify(authInfo), 'utf8')
     const rsp = await this.request({
       protocol: 'auth',
-      contentType: BtpMessageContentType.ApplicationJson,
+      contentType: FrameContentType.ApplicationJson,
       payload
     })
     const result = JSON.parse(rsp.payload.toString('utf8'))
@@ -141,20 +120,20 @@ export class BtpStream extends EventEmitter {
   }
 
   /**
-   * Send a BTP Message and wait for the ACK
+   * Send a Message and wait for the ACK
    *
    * @param message the message to send
    */
-  public message (message: BtpMessage): Promise<void> {
+  public message (message: MessagePayload): Promise<void> {
     return new Promise<void>((ackCallback, errorCallback) => {
       const id = new UUID()
-      const type = BtpPacketType.MESSAGE
+      const type = FrameType.MESSAGE
       const packet = Object.assign({ id: id.toString(), type }, message)
 
       const sentMessage = new SentMessage({ packet })
         .on('ack', () => { ackCallback() })
-        .on('response', (response: BtpResponsePacket) => {
-          const error = new Error(`Expected an ack but got a response: ${btpMessageToString(response)}`)
+        .on('response', (response: ResponseFrame) => {
+          const error = new Error(`Expected an ack but got a response: ${messageFrameToString(response)}`)
           errorCallback(error)
         })
         .on('error', (error: Error) => {
@@ -169,7 +148,7 @@ export class BtpStream extends EventEmitter {
   }
 
   /**
-   * Send a BTP Request and wait for the response.
+   * Send a Request and wait for the Response.
    *
    * An ACK callback can be provided which is called when an ACK is received
    * from the other side (or a response/error if no ACK was received prior).
@@ -179,10 +158,10 @@ export class BtpStream extends EventEmitter {
    * @param message Message to send
    * @param ackCallback Optional ACK callback
    */
-  public request (message: BtpMessage, ackCallback?: () => void): Promise<BtpMessage> {
-    return new Promise<BtpMessage>((responseCallback, errorCallback) => {
+  public request (message: MessagePayload, ackCallback?: () => void): Promise<MessagePayload> {
+    return new Promise<MessagePayload>((responseCallback, errorCallback) => {
       const id = new UUID()
-      const type = BtpPacketType.REQUEST
+      const type = FrameType.REQUEST
       const packet = Object.assign({ id: id.toString(), type }, message)
       let acknowledged = false
 
@@ -193,13 +172,13 @@ export class BtpStream extends EventEmitter {
             ackCallback()
           }
         })
-        .on('response', (response: BtpResponsePacket) => {
+        .on('response', (response: ResponseFrame) => {
           if (!acknowledged && ackCallback) {
             ackCallback()
           }
           responseCallback(response)
         })
-        .on('error', (error: BtpError) => {
+        .on('error', (error: TransportError) => {
           if (!acknowledged && ackCallback) {
             ackCallback()
           }
@@ -215,26 +194,26 @@ export class BtpStream extends EventEmitter {
 
   private _handleData (packet: any): void {
     try {
-      if (isBtpMessage(packet)) {
-        if (packet.type === BtpPacketType.MESSAGE) {
+      if (isMessageFrame(packet)) {
+        if (packet.type === FrameType.MESSAGE) {
           this._handleMessage(packet)
         } else {
           this._handleRequest(packet)
         }
-      } else if (isBtpResponse(packet)) {
+      } else if (isResponseFrame(packet)) {
         this._handleResponse(packet)
-      } else if (isBtpError(packet)) {
+      } else if (isErrorFrame(packet)) {
         this._handleError(packet)
-      } else if (isBtpAck(packet)) {
+      } else if (isAckFrame(packet)) {
         this._handleAck(packet)
       }
     } catch (e) {
       log.trace('Handle Data Error', packet)
-      this.emit('error', new SError(e, `Unable to deserialize BTP message: ${packet}`))
+      this.emit('error', new SError(e, `Unable to deserialize frame: ${packet}`))
     }
   }
 
-  private _handleMessage (packet: BtpMessagePacket): void {
+  private _handleMessage (packet: MessageFrame): void {
 
     // Idempotency - just send ack for same message
     const prevReceivedMessage = this._receivedMessages.get(packet.id.toString())
@@ -245,8 +224,8 @@ export class BtpStream extends EventEmitter {
         this._send({
           id: new UUID().toString(),
           correlationId: packet.id,
-          type: BtpPacketType.ACK
-        } as BtpAckPacket,
+          type: FrameType.ACK
+        } as AckFrame,
         prevReceivedMessage.acknowledged.bind(prevReceivedMessage))
       } else if (Number(prevReceivedMessage.state) === Number(ReceivedMessageState.ERROR_SENT)) {
         this._send(
@@ -262,26 +241,26 @@ export class BtpStream extends EventEmitter {
       const ackPacket = {
         id: new UUID().toString(),
         correlationId: packet.id,
-        type: BtpPacketType.ACK
-      } as BtpAckPacket
+        type: FrameType.ACK
+      } as AckFrame
       this._send(
         ackPacket,
         receivedMessage.acknowledged.bind(receivedMessage))
-      this.emit('message', packet, (error: BtpError) => {
+      this.emit('message', packet, (error: TransportError) => {
         const errorPacket = {
           id: new UUID().toString(),
           correlationId: packet.id,
-          type: BtpPacketType.ERROR,
-          code: BtpErrorCode.NotAcceptedError, // TODO Map BtpError to correct code
+          type: FrameType.ERROR,
+          code: TransportErrorCode.NotAcceptedError, // TODO Map TransportError to correct code
           message: error.message
-        } as BtpErrorMessagePacket
+        } as ErrorFrame
         this._send(
           errorPacket,
           receivedMessage.errorSent.bind(receivedMessage, errorPacket))
       })
     }
   }
-  private _handleRequest (packet: BtpMessagePacket): void {
+  private _handleRequest (packet: MessageFrame): void {
 
     // Idempotency - just send ack or resend reply
     const prevReceivedRequest = this._receivedMessages.get(packet.id.toString())
@@ -292,8 +271,8 @@ export class BtpStream extends EventEmitter {
         this._send({
           id: new UUID().toString(),
           correlationId: packet.id,
-          type: BtpPacketType.ACK
-        } as BtpAckPacket,
+          type: FrameType.ACK
+        } as AckFrame,
         prevReceivedRequest.acknowledged.bind(prevReceivedRequest))
       } else if (Number(prevReceivedRequest.state) === Number(ReceivedMessageState.RESPONSE_SENT)) {
         const responsePacket = Object.assign(prevReceivedRequest.response, { id: new UUID().toString() })
@@ -315,12 +294,12 @@ export class BtpStream extends EventEmitter {
       const ackPacket = {
         id: new UUID().toString(),
         correlationId: packet.id,
-        type: BtpPacketType.ACK
-      } as BtpAckPacket
+        type: FrameType.ACK
+      } as AckFrame
       this._send(
         ackPacket,
         receivedRequest.acknowledged.bind(receivedRequest))
-      this.emit('request', packet, (reply: BtpMessage | BtpErrorMessage | Promise<BtpMessage | BtpErrorMessage>) => {
+      this.emit('request', packet, (reply: MessagePayload | ErrorPayload | Promise<MessagePayload | ErrorPayload>) => {
         if (reply instanceof Promise) {
           reply.then(asyncReply => {
             this._reply(receivedRequest, asyncReply)
@@ -328,9 +307,9 @@ export class BtpStream extends EventEmitter {
             const errorPacket = Object.assign({
               id: new UUID().toString(),
               correlationId: packet.id,
-              type: BtpPacketType.ERROR,
-              code: BtpErrorCode.NotAcceptedError
-            }, error) as BtpErrorMessagePacket
+              type: FrameType.ERROR,
+              code: TransportErrorCode.NotAcceptedError
+            }, error) as ErrorFrame
             this._send(errorPacket, receivedRequest.errorSent.bind(receivedRequest, errorPacket))
           })
         } else {
@@ -339,25 +318,25 @@ export class BtpStream extends EventEmitter {
       })
     }
   }
-  private _reply (receivedRequest: ReceivedMessage, reply: BtpErrorMessage | BtpMessage) {
-    if (reply instanceof BtpError) {
+  private _reply (receivedRequest: ReceivedMessage, reply: ErrorPayload | MessagePayload) {
+    if (reply instanceof TransportError) {
       const errorPacket = Object.assign({
         id: new UUID().toString(),
         correlationId: receivedRequest.packet.id,
-        type: BtpPacketType.ERROR
-      }, reply) as BtpErrorMessagePacket
+        type: FrameType.ERROR
+      }, reply) as ErrorFrame
       this._send(errorPacket, receivedRequest.errorSent.bind(receivedRequest, errorPacket))
     } else {
       const responsePacket = Object.assign({
         id: new UUID().toString(),
         correlationId: receivedRequest.packet.id,
-        type: BtpPacketType.RESPONSE
-      }, reply) as BtpResponsePacket
+        type: FrameType.RESPONSE
+      }, reply) as ResponseFrame
       this._send(responsePacket, receivedRequest.responseSent.bind(receivedRequest, responsePacket))
     }
   }
 
-  private _handleResponse (packet: BtpResponsePacket): void {
+  private _handleResponse (packet: ResponseFrame): void {
 
     // Idempotency - just send ack for same response
     const prevReceivedResponse = this._receivedMessages.get(packet.id.toString())
@@ -368,8 +347,8 @@ export class BtpStream extends EventEmitter {
         this._send({
           id: new UUID().toString(),
           correlationId: packet.id,
-          type: BtpPacketType.ACK
-        } as BtpAckPacket,
+          type: FrameType.ACK
+        } as AckFrame,
         prevReceivedResponse.acknowledged.bind(prevReceivedResponse))
       } else if (Number(prevReceivedResponse.state) === Number(ReceivedMessageState.ERROR_SENT)) {
         const errorPacket = Object.assign(prevReceivedResponse.error, { id: new UUID().toString() })
@@ -388,10 +367,10 @@ export class BtpStream extends EventEmitter {
         const errorPacket = {
           id: new UUID().toString(),
           correlationId: packet.id,
-          type: BtpPacketType.ERROR,
-          code: BtpErrorCode.UnknownCorrelationId,
+          type: FrameType.ERROR,
+          code: TransportErrorCode.UnknownCorrelationId,
           message: `No request found with id: ${packet.correlationId.toString()}`
-        } as BtpErrorMessagePacket
+        } as ErrorFrame
         this._send(
           errorPacket,
           receivedResponse.errorSent.bind(receivedResponse))
@@ -399,15 +378,15 @@ export class BtpStream extends EventEmitter {
         this._send({
           id: new UUID().toString(),
           correlationId: packet.id,
-          type: BtpPacketType.ACK
-        } as BtpAckPacket,
+          type: FrameType.ACK
+        } as AckFrame,
         receivedResponse.acknowledged.bind(receivedResponse))
         originalRequest.responseReceived(packet)
       }
     }
   }
 
-  private _handleError (packet: BtpErrorMessagePacket): void {
+  private _handleError (packet: ErrorFrame): void {
 
     // Idempotency - just send ack for same error
     const prevReceivedError = this._receivedMessages.get(packet.id.toString())
@@ -418,8 +397,8 @@ export class BtpStream extends EventEmitter {
         this._send({
           id: new UUID().toString(),
           correlationId: packet.id,
-          type: BtpPacketType.ACK
-        } as BtpAckPacket,
+          type: FrameType.ACK
+        } as AckFrame,
         prevReceivedError.acknowledged.bind(prevReceivedError))
       } else if (Number(prevReceivedError.state) === Number(ReceivedMessageState.ERROR_SENT)) {
         const errorPacket = Object.assign(prevReceivedError.error, { id: new UUID().toString() })
@@ -438,10 +417,10 @@ export class BtpStream extends EventEmitter {
         const errorPacket = {
           id: new UUID().toString(),
           correlationId: packet.id,
-          type: BtpPacketType.ERROR,
-          code: BtpErrorCode.UnknownCorrelationId,
+          type: FrameType.ERROR,
+          code: TransportErrorCode.UnknownCorrelationId,
           message: `No request found with id: ${packet.correlationId.toString()}`
-        } as BtpErrorMessagePacket
+        } as ErrorFrame
         this._send(
           errorPacket,
           receivedError.errorSent.bind(receivedError))
@@ -449,15 +428,15 @@ export class BtpStream extends EventEmitter {
         this._send({
           id: new UUID().toString(),
           correlationId: packet.id,
-          type: BtpPacketType.ACK
-        } as BtpAckPacket,
+          type: FrameType.ACK
+        } as AckFrame,
         receivedError.acknowledged.bind(receivedError))
         originalRequest.errorReceived(packet)
       }
     }
   }
 
-  private _handleAck (packet: BtpAckPacket): void {
+  private _handleAck (packet: AckFrame): void {
     const originalMessage = this._sentMessages.get(packet.correlationId.toString())
     if (!originalMessage) {
       // TODO Log an error for unsolicted ACK?
@@ -465,8 +444,8 @@ export class BtpStream extends EventEmitter {
       originalMessage.acknowledged()
     }
   }
-  private _send (packet: BtpMessagePacket | BtpResponsePacket | BtpErrorMessagePacket | BtpAckPacket , cb: () => void) {
-    this._log.debug(`send: ${btpPacketToString(packet)}`)
+  private _send (packet: MessageFrame | ResponseFrame | ErrorFrame | AckFrame , cb: () => void) {
+    this._log.debug(`send: ${frameToString(packet)}`)
     this._stream.write(packet)
   }
   private _gcMessages () {
@@ -484,32 +463,26 @@ export class BtpStream extends EventEmitter {
   }
 }
 
-export async function createConnection (address: string, options: BtpStreamOptions): Promise<BtpStream> {
+export async function createConnection (address: string, options: GrpcTransportOptions): Promise<GrpcTransport> {
 
-  const grpc = new interledger.Interledger(address,
-      credentials.createInsecure())
-  let meta = new Metadata()
-  const accountInfo = options.accountInfo
-  meta.add('accountId', options.accountId as MetadataValue || 'test')
-  meta.add('accountRelation', accountInfo.relation as MetadataValue)
-  meta.add('accountAssetCode', accountInfo.assetCode as MetadataValue)
+  const channel = new TransportService(address, credentials.createInsecure())
+  const meta = new Metadata()
+  const { accountId, accountInfo } = options
+  meta.add('accountId', String(accountId) as MetadataValue || 'test')
+  meta.add('accountRelation', String(accountInfo.relation) as MetadataValue)
+  meta.add('accountAssetCode', String(accountInfo.assetCode) as MetadataValue)
   meta.add('accountAssetScale', String(accountInfo.assetScale) as MetadataValue)
 
   // TODO: Fix to be more consistent with async/await
-  let auth = await new Promise<BtpStream>((resolve, reject) => {
-    grpc.Authenticate({ id: options.accountId }, function (err, feature) {
+  await new Promise<AuthResponse | null>((resolve, reject) => {
+    channel.Authenticate({ id: accountId }, function (err, result) {
       if (err) {
         reject(err)
       } else {
-        resolve(feature)
+        resolve(result)
       }
     })
-  }).catch(error => {
-    console.log(error)
   })
 
-  const stream = grpc.Stream(meta)
-  return new BtpStream(stream, { accountId: options.accountId, accountInfo: options.accountInfo } , {
-    log: createLogger('btp-socket')
-  })
+  return new GrpcTransport(channel.MessageStream(meta), { accountId, accountInfo }, { log })
 }

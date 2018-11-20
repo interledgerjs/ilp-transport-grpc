@@ -1,13 +1,13 @@
 syntax = "proto3";
 
-package interledger;
+package transport;
 
-service Interledger {
+service TransportService {
     rpc Authenticate (AuthMessage) returns (AuthResponse) {}
-    rpc Stream (stream IlpPacketFrame) returns (stream IlpPacketFrame) {}
+    rpc MessageStream (stream Frame) returns (stream Frame) {}
 }
 
-message IlpPacketFrame {
+message Frame {
     int32 type = 1;
     string id = 2;
     string correlationId = 3;

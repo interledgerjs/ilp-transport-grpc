@@ -1,12 +1,11 @@
-# ilp-protocol-btp3
-ilp-x module provides an asynchronous request-response framework for communicating BTPv3 packets between clients and server over an
-underlying gRPC bidirectional stream.
+# ilp-transport-grpc
+ilp-transport-grpc module provides an asynchronous request-response framework for communicating ILP packets between clients and a server over an underlying gRPC bidirectional stream.
 
 
 #Server
 ```javascript
-const server = new BtpServer({}, {
-  log: createLogger('btp-server'),
+const server = new GrpcTransportServer({}, {
+  log: createLogger('grpc-server'),
   authenticate: () => Promise.resolve({ id: 'test' })
 })
 
@@ -32,7 +31,7 @@ client.on('request', (data) =>  {
 
 const response = await client.request({
     protocol: 'ilp',
-    contentType: BtpMessageContentType.ApplicationOctetStream,
+    contentType: FrameContentType.ApplicationOctetStream,
     payload: Buffer.from('Hello?')
   })
 ```

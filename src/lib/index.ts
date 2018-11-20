@@ -1,21 +1,21 @@
 export {
-  createConnection, BtpStream, BtpStreamOptions, BtpStreamServices, BtpAuthResponse
+  createConnection, GrpcTransport, GrpcTransportOptions, GrpcTransportServices, BtpAuthResponse
 } from './stream'
 
 export {
-  BtpServer, BtpServerOptions, BtpServerServices, BtpServerListenOptions
+  GrpcTransportServer, GrpcTransportServerOptions, BtpServerServices, BtpServerListenOptions
 } from './server'
 
 export * from './uuid'
 
 export {
-  BtpPacketType, BtpMessageContentType,
-  BtpPacket, BtpReplyPacket, BtpMessagePacket, BtpResponsePacket, BtpErrorMessagePacket, BtpAckPacket,
-  BtpMessage, BtpErrorMessage,
-  btpPacketToString, btpMessageToString, btpErrorMessageToString, btpAckToString,
-  isBtpMessage, isBtpResponse, isBtpError, isBtpAck
+  FrameType, FrameContentType,
+  FrameHeaders, ReplyFrameHeaders, MessageFrame, ResponseFrame, ErrorFrame, AckFrame,
+  MessagePayload, ErrorPayload,
+  frameToString, messageFrameToString, errorFrameToString, ackFrameToString,
+  isMessageFrame, isResponseFrame, isErrorFrame, isAckFrame
 } from './packet'
 
 export {
-  BtpErrorCode, BtpError, btpErrorFromMessage, btpErrorToString
+  TransportErrorCode, TransportError, transportErrorFromMessage, transportErrorToString
 } from './error'

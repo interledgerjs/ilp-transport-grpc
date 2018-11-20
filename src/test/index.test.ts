@@ -2,7 +2,7 @@ import 'mocha'
 import * as sinon from 'sinon'
 import * as Chai from 'chai'
 import * as chaiAsPromised from 'chai-as-promised'
-import { BtpError, BtpMessage, BtpMessageContentType, BtpServer, BtpStream, createConnection } from '../lib'
+import { TransportError, MessagePayload, FrameContentType, GrpcTransportServer, GrpcTransport, createConnection } from '../lib'
 import createLogger from 'ilp-logger'
 const log = createLogger('ilp-protocol-btp')
 Chai.use(chaiAsPromised)
@@ -10,17 +10,17 @@ const assert = Object.assign(Chai.assert, sinon.assert)
 
 describe('Real connection', () => {
 
-  let server: BtpServer
+  let server: GrpcTransportServer
 
   beforeEach(async () => {
 
-    server = new BtpServer({}, { log: log }).on('connection', (connection: BtpStream) => {
-      connection.on('request', (message: BtpMessage, replyCallback: (reply: BtpMessage | BtpError | Promise<BtpMessage | BtpError>) => void) => {
+    server = new GrpcTransportServer({}, { log: log }).on('connection', (connection: GrpcTransport) => {
+      connection.on('request', (message: MessagePayload, replyCallback: (reply: MessagePayload | TransportError | Promise<MessagePayload | TransportError>) => void) => {
         replyCallback(new Promise((respond) => {
           setTimeout(() => {
             respond({
               protocol: 'ilp',
-              contentType: BtpMessageContentType.ApplicationOctetStream,
+              contentType: FrameContentType.ApplicationOctetStream,
               payload: Buffer.from('Goodbye!')
             })
           }, 0)
@@ -42,7 +42,7 @@ describe('Real connection', () => {
 
     const response = await client.request({
       protocol: 'ilp',
-      contentType: BtpMessageContentType.ApplicationOctetStream,
+      contentType: FrameContentType.ApplicationOctetStream,
       payload: Buffer.from('Hello')
     })
 

@@ -4,9 +4,6 @@ const lib_1 = require("../lib");
 const uuid_1 = require("../lib/uuid");
 (async () => {
     const client = await lib_1.createConnection('127.0.0.1:5001', {
-        headers: {
-            authorization: 'Bearer TOKEN'
-        },
         accountId: 'matt',
         accountInfo: {
             relation: 'child',
@@ -23,9 +20,14 @@ const uuid_1 = require("../lib/uuid");
     const errorPacket = {
         id: new uuid_1.default().toString(),
         correlationId: new uuid_1.default().toString(),
-        type: lib_1.BtpPacketType.ERROR,
-        code: lib_1.BtpErrorCode.UnknownCorrelationId,
+        type: lib_1.FrameType.ERROR,
+        code: lib_1.TransportErrorCode.UnknownCorrelationId,
         message: `No request found with id: ${new uuid_1.default().toString()}`
     };
+    const resp = await client.message({
+        protocol: 'test',
+        contentType: lib_1.FrameContentType.TextPlain,
+        payload: Buffer.from('TEST')
+    });
 })();
 //# sourceMappingURL=client.js.map

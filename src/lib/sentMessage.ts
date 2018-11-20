@@ -1,6 +1,6 @@
-import { BtpMessagePacket, BtpResponsePacket, BtpErrorMessagePacket, BtpPacketType } from './packet'
+import { MessageFrame, ResponseFrame, ErrorFrame, FrameType } from './packet'
 import { EventEmitter } from 'events'
-import { BtpError, btpErrorFromMessage, BtpErrorCode } from './error'
+import { transportErrorFromMessage } from './error'
 
 export enum SentMessageState {
   CREATED = 0,
@@ -12,7 +12,7 @@ export enum SentMessageState {
 }
 
 export interface SentMessageOptions {
-  packet: BtpMessagePacket
+  packet: MessageFrame
   retries?: number
   ackTimeout?: number
   responseTimeout?: number
@@ -29,7 +29,7 @@ export class SentMessage extends EventEmitter {
   private _responseTimeoutMs: number
   private _state: SentMessageState
   private _timestamps: Map<SentMessageState, number> = new Map()
-  packet: BtpMessagePacket
+  packet: MessageFrame
 
   constructor (options: SentMessageOptions) {
     super()
@@ -52,7 +52,7 @@ export class SentMessage extends EventEmitter {
   }
 
   public get isComplete (): boolean {
-    return (this.packet.type === BtpPacketType.REQUEST &&
+    return (this.packet.type === FrameType.REQUEST &&
       Number(this._state) >= SentMessageState.RESPONSE_RECEIVED) ||
     Number(this._state) >= SentMessageState.ACK_RECEIVED
   }
@@ -69,22 +69,22 @@ export class SentMessage extends EventEmitter {
     this.emit('ack')
   }
 
-  public responseReceived (response: BtpResponsePacket): void {
+  public responseReceived (response: ResponseFrame): void {
     this._setState(SentMessageState.RESPONSE_RECEIVED)
     this._stopTimers()
     this.emit('response', response)
   }
 
-  public errorReceived (error: BtpErrorMessagePacket): void {
+  public errorReceived (error: ErrorFrame): void {
     this._setState(SentMessageState.ERROR_RECEIVED)
     this._stopTimers()
-    this.emit('error', btpErrorFromMessage(error))
+    this.emit('error', transportErrorFromMessage(error))
   }
 
   public timedOut (): void {
     this._setState(SentMessageState.TIMED_OUT)
     this._stopTimers()
-    const message = (this.packet.type === BtpPacketType.REQUEST)
+    const message = (this.packet.type === FrameType.REQUEST)
      ? 'response'
      : 'ACK'
     const error = new Error(`Timed out waiting for ${message}: ${this.packet.id.toString()}`)
@@ -107,13 +107,13 @@ export class SentMessage extends EventEmitter {
           this.emit('timeout')
           this._startTimers()
         } else {
-          if (this.packet.type !== BtpPacketType.REQUEST) {
+          if (this.packet.type !== FrameType.REQUEST) {
             this.timedOut()
           }
         }
       }, this._ackTimeoutMs)
     }
-    if (this.packet.type === BtpPacketType.REQUEST && !this._responseTimeout) {
+    if (this.packet.type === FrameType.REQUEST && !this._responseTimeout) {
       this._responseTimeout = setTimeout(() => {
         this.timedOut()
       }, this._responseTimeoutMs)

@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const lib_1 = require("../lib");
 const ilp_logger_1 = require("ilp-logger");
-const server = new lib_1.BtpServer({}, {
+const server = new lib_1.GrpcTransportServer({}, {
     log: ilp_logger_1.default('btp-server'),
     authenticate: () => Promise.resolve({ id: 'test' })
 });
@@ -21,7 +21,7 @@ server.on('connection', (stream) => {
             setTimeout(() => {
                 respond({
                     protocol: 'ilp',
-                    contentType: lib_1.BtpMessageContentType.ApplicationOctetStream,
+                    contentType: lib_1.FrameContentType.ApplicationOctetStream,
                     payload: Buffer.from('Goodbye!')
                 });
             }, 100);

@@ -1,36 +1,34 @@
-import { Reader, Writer } from 'oer-utils'
-import UUID from './uuid'
-import { BtpErrorCode, BtpError } from './error'
+import { TransportErrorCode, TransportError } from './error'
 
-export interface BtpPacket {
-  type: BtpPacketType
+export interface FrameHeaders {
+  type: FrameType
   id: string
 }
-export interface BtpReplyPacket extends BtpPacket {
+export interface ReplyFrameHeaders extends FrameHeaders {
   correlationId: string
 }
-export interface BtpMessage {
+export interface MessagePayload {
   protocol: string
-  contentType: BtpMessageContentType
+  contentType: FrameContentType
   payload: Buffer
 }
-export interface BtpErrorMessage {
-  code: BtpErrorCode
+export interface ErrorPayload {
+  code: TransportErrorCode
   message: string
 }
-export type BtpMessagePacket = BtpPacket & BtpMessage
-export type BtpResponsePacket = BtpReplyPacket & BtpMessage
-export type BtpErrorMessagePacket = BtpReplyPacket & BtpErrorMessage
-export type BtpAckPacket = BtpReplyPacket
-export type BtpGenericPacket = BtpMessagePacket & BtpResponsePacket & BtpErrorMessagePacket & BtpAckPacket
-export enum BtpPacketType {
+export type Frame = MessageFrame | ResponseFrame | ErrorFrame | AckFrame
+export type MessageFrame = FrameHeaders & MessagePayload
+export type ResponseFrame = ReplyFrameHeaders & MessagePayload
+export type ErrorFrame = ReplyFrameHeaders & ErrorPayload
+export type AckFrame = ReplyFrameHeaders
+export enum FrameType {
     MESSAGE = 1,
     REQUEST = 2,
     RESPONSE = 3,
     ERROR = 4,
     ACK = 5
 }
-export enum BtpMessageContentType {
+export enum FrameContentType {
     ApplicationOctetStream = 0,
     TextPlain = 1,
     ApplicationJson = 2
@@ -133,21 +131,21 @@ export enum BtpMessageContentType {
 //   }
 // }
 
-export function isBtpMessage (packet: BtpPacket): packet is BtpMessagePacket {
-  return packet.type === BtpPacketType.MESSAGE || packet.type === BtpPacketType.REQUEST
+export function isMessageFrame (packet: FrameHeaders): packet is MessageFrame {
+  return packet.type === FrameType.MESSAGE || packet.type === FrameType.REQUEST
 }
-export function isBtpResponse (packet: BtpPacket): packet is BtpResponsePacket {
-  return packet.type === BtpPacketType.RESPONSE
+export function isResponseFrame (packet: FrameHeaders): packet is ResponseFrame {
+  return packet.type === FrameType.RESPONSE
 }
-export function isBtpError (packet: BtpPacket): packet is BtpErrorMessagePacket {
-  return packet.type === BtpPacketType.ERROR
+export function isErrorFrame (packet: FrameHeaders): packet is ErrorFrame {
+  return packet.type === FrameType.ERROR
 }
-export function isBtpAck (packet: BtpPacket): packet is BtpAckPacket {
-  return packet.type === BtpPacketType.ACK
+export function isAckFrame (packet: FrameHeaders): packet is AckFrame {
+  return packet.type === FrameType.ACK
 }
 
-export function btpMessageToString (message: BtpMessagePacket | BtpResponsePacket) {
-  const correlationId = isBtpResponse(message) ? message.correlationId.toString() : undefined
+export function messageFrameToString (message: MessageFrame | ResponseFrame) {
+  const correlationId = isResponseFrame(message) ? message.correlationId.toString() : undefined
   return JSON.stringify({
     id: message.id.toString() || undefined,
     type: message.type || undefined,
@@ -157,43 +155,43 @@ export function btpMessageToString (message: BtpMessagePacket | BtpResponsePacke
   })
 }
 
-export function btpErrorMessageToString (error: BtpErrorMessagePacket) {
+export function errorFrameToString (error: ErrorFrame) {
   return JSON.stringify({
     id: error.id.toString() || undefined,
     type: error.type || undefined,
-    code: `${error.code} ${BtpErrorCode.getName(error.code)}`,
+    code: `${error.code} ${TransportErrorCode.getName(error.code)}`,
     message: error.message
   })
 }
 
-export function btpAckToString (packet: BtpAckPacket) {
+export function ackFrameToString (packet: AckFrame) {
   return JSON.stringify({
     id: packet.id.toString(),
     correlationId: packet.correlationId.toString()
   })
 }
 
-export function btpPacketToString (packet: BtpPacket): string {
-  if (isBtpMessage(packet)) {
-    return btpMessageToString(packet)
-  } else if (isBtpResponse(packet)) {
-    return btpMessageToString(packet)
-  } else if (isBtpError(packet)) {
-    return btpErrorMessageToString(packet)
-  } else if (isBtpAck(packet)) {
-    return btpAckToString(packet)
+export function frameToString (packet: FrameHeaders): string {
+  if (isMessageFrame(packet)) {
+    return messageFrameToString(packet)
+  } else if (isResponseFrame(packet)) {
+    return messageFrameToString(packet)
+  } else if (isErrorFrame(packet)) {
+    return errorFrameToString(packet)
+  } else if (isAckFrame(packet)) {
+    return ackFrameToString(packet)
   } else {
     throw new TypeError(`Unknown packet type: ${packet.type}`)
   }
 }
 
-function parsePayload (message: BtpMessage) {
+function parsePayload (message: MessagePayload) {
   switch (message.contentType) {
-    case BtpMessageContentType.TextPlain:
+    case FrameContentType.TextPlain:
       return message.payload.toString('utf8')
-    case BtpMessageContentType.ApplicationJson:
+    case FrameContentType.ApplicationJson:
       return JSON.parse(message.payload.toString('utf8'))
-    case BtpMessageContentType.ApplicationOctetStream:
+    case FrameContentType.ApplicationOctetStream:
       return message.payload.toString('hex')
   }
 }
