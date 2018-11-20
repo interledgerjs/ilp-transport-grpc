@@ -1,7 +1,7 @@
 {
-  "name": "ilp-protocol-btp3",
+  "name": "ilp-transport-grpc",
   "version": "0.0.0",
-  "description": "BTPv3 implementation",
+  "description": "gRPC-based protocol for exchanging ILP packets",
   "main": "dist/lib/index.js",
   "types": "dist/lib/index.d.ts",
   "files": [
@@ -18,22 +18,21 @@
     "clean": "rm -Rf .nyc_output && rm -Rf coverage && rm -Rf doc && rm -Rf lib ",
     "build": "tsc",
     "lint": "tslint --project .",
-    "pretest": "tsc --build && cp ./src/test/mocks/widgets/legacy-widget.js ./lib/test/mocks/widgets/legacy-widget.js",
+    "pretest": "tsc --build",
     "test": "nyc mocha --ui mocha-typescript --require source-map-support/register --recursive dist/test",
     "doc": "typedoc --options typedoc.js src/lib/index.ts",
     "codecov": "codecov",
     "prepare": "npm run build",
     "preversion": "npm run lint && npm test",
-    "version": "git add -A src",
     "postversion": "git push && git push --tags",
     "prepublishOnly": "npm run lint && npm test && npm run doc"
   },
   "engines": {
-    "node": ">=8"
+    "node": ">=8.12.0"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/adrianhopebailie/ilp-protocol-btp3.git"
+    "url": "git+https://github.com/interledgerjs/ilp-protocol-grpc.git"
   },
   "keywords": [
     "interledger",
@@ -46,40 +45,37 @@
   "author": "Interledger Team <info@interledger.org>",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/adrianhopebailie/ilp-protocol-btp3/issues"
+    "url": "https://github.com/interledgerjs/ilp-protocol-grpc/issues"
   },
-  "homepage": "https://github.com/adrianhopebailie/ilp-protocol-btp3#readme",
+  "homepage": "https://github.com/interledgerjs/ilp-protocol-grpc#readme",
   "dependencies": {
     "@grpc/proto-loader": "^0.3.0",
-    "@types/ws": "^6.0.1",
-    "grpc": "^1.16.0",
+    "grpc": "^1.16.1",
     "ilp-logger": "^1.1.2",
-    "ilp-module-loader": "^0.3.3",
-    "oer-utils": "^3.0.1",
-    "verror": "^1.10.0",
-    "ws": "^6.0.0"
+    "oer-utils": "^3.2.0",
+    "verror": "^1.10.0"
   },
   "devDependencies": {
-    "@types/chai": "^4.1.4",
+    "@types/chai": "^4.1.7",
     "@types/chai-as-promised": "^7.1.0",
-    "@types/debug": "0.0.30",
+    "@types/debug": "^0.0.31",
     "@types/mocha": "^5.2.5",
-    "@types/node": "^10.9.4",
-    "@types/node-fetch": "^2.1.2",
-    "@types/sinon": "^5.0.1",
+    "@types/node": "^10.12.9",
+    "@types/node-fetch": "^2.1.4",
+    "@types/sinon": "^5.0.6",
     "@types/verror": "^1.10.3",
-    "chai": "^4.1.2",
+    "chai": "^4.2.0",
     "chai-as-promised": "^7.1.1",
-    "codecov": "^3.0.2",
+    "codecov": "^3.1.0",
     "mocha": "^5.2.0",
-    "mocha-typescript": "^1.1.14",
-    "nyc": "^12.0.2",
-    "sinon": "^6.0.1",
+    "mocha-typescript": "^1.1.17",
+    "nyc": "^13.1.0",
+    "sinon": "^7.1.1",
     "source-map-support": "^0.5.9",
     "tslint": "^5.11.0",
     "tslint-config-standard": "^8.0.1",
-    "typedoc": "^0.12.0",
-    "typescript": "^3.0.3"
+    "typedoc": "^0.13.0",
+    "typescript": "^3.1.6"
   },
   "nyc": {
     "check-coverage": true,
@@ -98,9 +94,5 @@
       "text-summary"
     ],
     "all": true
-  },
-  "optionalDependencies": {
-    "bufferutil": "^4.0.0",
-    "utf-8-validate": "^5.0.1"
   }
 }

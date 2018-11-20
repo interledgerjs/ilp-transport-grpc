@@ -4,10 +4,10 @@ package interledger;
 
 service Interledger {
     rpc Authenticate (AuthMessage) returns (AuthResponse) {}
-    rpc Stream (stream BtpPacket) returns (stream BtpPacket) {}
+    rpc Stream (stream IlpPacketFrame) returns (stream IlpPacketFrame) {}
 }
 
-message BtpPacket {
+message IlpPacketFrame {
     int32 type = 1;
     string id = 2;
     string correlationId = 3;
