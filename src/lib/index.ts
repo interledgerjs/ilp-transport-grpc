@@ -3,7 +3,7 @@ export {
 } from './stream'
 
 export {
-  GrpcTransportServer, GrpcTransportServerOptions, BtpServerServices, BtpServerListenOptions
+  GrpcTransportServer, GrpcTransportServerOptions, GrpcTransportServerServices, GrpcTransportServerListenOptions
 } from './server'
 
 export * from './uuid'
